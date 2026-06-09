@@ -130,11 +130,12 @@ Jinder/
 │   ├── scheduler.ts            # Periodic cron-like job queue and status metrics tracker
 │   └── server.ts               # Express app routes (CV upload, scraper run, configurations)
 ├── tests/                      # Testing workspace
-│   └── e2e/                    # Complete E2E mock verification engine
-│       ├── test-cases.ts       # Detailed mock test case parameters (63 tests)
-│       ├── mock-server.ts      # Offline servers simulating Gemini & job platforms
-│       ├── database-helper.ts  # Database isolation wrappers
-│       └── run-tests.ts        # Main test execution file
+│   ├── e2e/                    # Complete E2E mock verification engine
+│   │   ├── test-cases.ts       # Detailed mock test case parameters (63 tests)
+│   │   ├── mock-server.ts      # Offline servers simulating Gemini & job platforms
+│   │   ├── database-helper.ts  # Database isolation wrappers
+│   │   └── run-tests.ts        # Main test execution file
+│   └── scratch/                # Manual verification scratch scripts and mock HTML pages
 ├── Dockerfile                  # Application build container configuration
 ├── docker-compose.yml          # Composition services (app on port 5000, tests service)
 ├── jobs.db                     # SQLite database file (local only, git-ignored)

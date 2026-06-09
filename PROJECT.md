@@ -44,7 +44,7 @@
 ## Code Layout
 - `src/scrapers/nofluffjobs.ts`: Scraper implementation for nofluffjobs.com/hu.
 - `src/scrapers/scraperManager.ts`: Main entry point runner calling all scrapers.
-- `test-nofluff.ts`: Verification script for the new scraper.
+- `tests/scratch/test-nofluff.ts`: Verification script for the new scraper.
 
 ## Docker Integration
 
