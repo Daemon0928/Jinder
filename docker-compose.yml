@@ -1,0 +1,34 @@
+services:
+  # Main Jinder Application Service
+  jinder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jinder-app
+    ports:
+      - "5000:5000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.1-flash-lite}
+      - PORT=5000
+      - DB_FILE=/app/data/jobs.db
+    volumes:
+      - jinder-data:/app/data
+    restart: unless-stopped
+
+  # E2E Test Runner Service
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jinder-tests
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.1-flash-lite}
+      - NODE_ENV=test
+      - DB_FILE=jobs.test.db
+      - MOCK_GEMINI=true
+    command: ["npx", "tsx", "tests/e2e/run-tests.ts"]
+
+volumes:
+  jinder-data:

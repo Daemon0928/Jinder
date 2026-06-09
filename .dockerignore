@@ -1,0 +1,14 @@
+node_modules/
+client/node_modules/
+dist/
+jobs.db
+jobs.db-shm
+jobs.db-wal
+jobs.test.db
+jobs.test.db-shm
+jobs.test.db-wal
+.env
+.git
+.agents/
+.gemini/
+*.log

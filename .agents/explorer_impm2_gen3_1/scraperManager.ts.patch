@@ -1,0 +1,84 @@
+diff --git a/src/scrapers/scraperManager.ts b/src/scrapers/scraperManager.ts
+index c6bfa7e..c94d1b7 100644
+--- a/src/scrapers/scraperManager.ts
++++ b/src/scrapers/scraperManager.ts
+@@ -1,6 +1,16 @@
+ import db from '../db/database';
+-import { scrapeProfessionHu, scrapeJobDetails } from './profession';
++import {
++  scrapeProfessionHu,
++  scrapeJobDetails as scrapeProfessionDetails,
++  ScrapedJob as ProfessionJob
++} from './profession';
++import {
++  scrapeNoFluffJobs,
++  scrapeJobDetails as scrapeNoFluffDetails,
++  ScrapedJob as NoFluffJob
++} from './nofluffjobs';
+ import { matchJobWithGemini } from '../matcher/gemini';
++
++type ScrapedJob = ProfessionJob | NoFluffJob;
+ 
+ export interface ScrapeReport {
+   scrapedCount: number;
+@@ -44,13 +54,32 @@ export async function runScraper(
+     
+     // Fetch selected locations from config
+     const locRow = db.prepare("SELECT value FROM config WHERE key = 'locations'").get() as { value: string } | undefined;
+-    const locations: string[] = locRow ? JSON.parse(locRow.value) : [];
++    const rawLocations: string[] = locRow ? JSON.parse(locRow.value) : [];
++    // Normalize to lowercase for case-insensitive lookup mapping
++    const locations = rawLocations.map(loc => loc.toLowerCase());
+ 
+-    const jobs = await scrapeProfessionHu(keyword, locations);
+-    report.scrapedCount = jobs.length;
++    // Run scrapers in parallel with error handling
++    const [professionJobs, noFluffJobs] = await Promise.all([
++      scrapeProfessionHu(keyword, locations).catch(err => {
++        console.error('Profession.hu scraper failed:', err);
++        report.errors.push(`Profession.hu: ${err.message || err}`);
++        return [] as ProfessionJob[];
++      }),
++      scrapeNoFluffJobs(keyword, locations).catch(err => {
++        console.error('No Fluff Jobs scraper failed:', err);
++        report.errors.push(`No Fluff Jobs: ${err.message || err}`);
++        return [] as NoFluffJob[];
++      })
++    ]);
+ 
+-    onProgress?.({ totalJobs: jobs.length });
++    // Merge results
++    const rawJobs = [...professionJobs, ...noFluffJobs];
++    report.scrapedCount = rawJobs.length;
++
++    // Deduplicate in-memory by job_id
++    const uniqueJobsMap = new Map<string, ScrapedJob>();
++    for (const job of rawJobs) {
++      if (!uniqueJobsMap.has(job.job_id)) {
++        uniqueJobsMap.set(job.job_id, job);
++      }
++    }
++    const jobs = Array.from(uniqueJobsMap.values());
++
++    onProgress?.({ totalJobs: jobs.length });
+ 
+     // Prepared statements for DB queries
+     const checkStmt = db.prepare('SELECT id FROM jobs WHERE job_id = ?');
+@@ -82,7 +111,17 @@ export async function runScraper(
+           currentJobTitle: job.title,
+         });
+ 
+-        const detailText = await scrapeJobDetails(job.link);
++        let detailText = '';
++        if (job.platform === 'profession') {
++          detailText = await scrapeProfessionDetails(job.link);
++        } else if (job.platform === 'nofluffjobs') {
++          detailText = await scrapeNoFluffDetails(job.link);
++        } else {
++          console.warn(`Unsupported platform "${job.platform}" for job ${job.job_id}`);
++          continue;
++        }
++
+         if (!detailText) {
+           console.warn(`Could not retrieve details for job link: ${job.link}`);
+           continue;
