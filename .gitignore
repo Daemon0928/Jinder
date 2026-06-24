@@ -32,3 +32,6 @@ Thumbs.db
 
 # Obsidian Vault (Junctioned Folder)
 vault/
+
+# Playwright mcp artifacts
+.playwright-mcp/
