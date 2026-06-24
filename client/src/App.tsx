@@ -27,7 +27,7 @@ interface Job {
 
 interface ScrapeProgress {
   isScraping: boolean;
-  phase: "searching" | "fetching" | "matching" | "saving" | "done";
+  phase: "searching" | "fetching" | "matching" | "saving" | "done" | "reevaluating";
   currentJobIndex: number;
   totalJobs: number;
   currentJobTitle: string;
@@ -103,11 +103,15 @@ export default function App() {
   // Config state
   const [cvText, setCvText] = useState("");
   const [keywords, setKeywords] = useState<string[]>([]);
+  const [excludeKeywords, setExcludeKeywords] = useState<string[]>([]);
   const [locations, setLocations] = useState<string[]>([]);
   const [companies, setCompanies] = useState<string[]>([]);
   const [discordWebhook, setDiscordWebhook] = useState("");
   const [newKeyword, setNewKeyword] = useState("");
+  const [newExcludeKeyword, setNewExcludeKeyword] = useState("");
   const [newCompany, setNewCompany] = useState("");
+  const [batchSize, setBatchSize] = useState<number>(10);
+  const [reevalBatchSize, setReevalBatchSize] = useState<number>(10);
 
   // PDF upload state
   const [cvFilename, setCvFilename] = useState<string | null>(null);
@@ -168,11 +172,14 @@ export default function App() {
         const data = await res.json();
         setCvText(data.cv);
         setKeywords(data.keywords || []);
+        setExcludeKeywords(data.excludeKeywords || []);
         setLocations(data.locations || []);
         setCompanies(data.companies || []);
         setCvFilename(data.cvFilename || null);
         setCvSummary(data.cvSummary || null);
         setDiscordWebhook(data.discordWebhook || "");
+        setBatchSize(data.batchSize || 10);
+        setReevalBatchSize(prev => prev === 10 ? (data.batchSize || 10) : prev);
       }
     } catch (err) {
       console.error("Error fetching config:", err);
@@ -327,7 +334,7 @@ export default function App() {
       const res = await fetch("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cv: cvText, keywords, discordWebhook, locations, companies }),
+        body: JSON.stringify({ cv: cvText, keywords, excludeKeywords, discordWebhook, locations, companies, batchSize }),
       });
       if (res.ok) {
         setSaveStatus("success");
@@ -370,6 +377,8 @@ export default function App() {
         return "AI matching with CV...";
       case "saving":
         return "Saving to database...";
+      case "reevaluating":
+        return "Reevaluating jobs with CV...";
       case "done":
         return "Complete";
     }
@@ -451,6 +460,19 @@ export default function App() {
     setKeywords(keywords.filter((kw) => kw !== kwToRemove));
   };
 
+  // Add exclude keyword
+  const handleAddExcludeKeyword = () => {
+    if (newExcludeKeyword && !excludeKeywords.includes(newExcludeKeyword.trim())) {
+      setExcludeKeywords([...excludeKeywords, newExcludeKeyword.trim()]);
+      setNewExcludeKeyword("");
+    }
+  };
+
+  // Remove exclude keyword
+  const handleRemoveExcludeKeyword = (kwToRemove: string) => {
+    setExcludeKeywords(excludeKeywords.filter((kw) => kw !== kwToRemove));
+  };
+
   // Add target company
   const handleAddCompany = () => {
     if (newCompany && !companies.includes(newCompany.trim())) {
@@ -462,6 +484,32 @@ export default function App() {
   // Remove target company
   const handleRemoveCompany = (companyToRemove: string) => {
     setCompanies(companies.filter((c) => c !== companyToRemove));
+  };
+
+  // Trigger CV Reevaluation
+  const handleTriggerReevaluate = async () => {
+    if (isScraping) return;
+    setScrapeProgress({
+      ...defaultProgress,
+      isScraping: true,
+      phase: "reevaluating",
+    });
+    try {
+      const res = await fetch("/api/scrape/reevaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batchSize: reevalBatchSize }),
+      });
+      if (!res.ok) {
+        setScrapeProgress(defaultProgress);
+        const errData = await res.json();
+        alert(`Error: ${errData.error || "Failed to trigger reevaluation"}`);
+      }
+    } catch (err) {
+      setScrapeProgress(defaultProgress);
+      console.error("Error launching reevaluation:", err);
+      alert("Failed to launch reevaluation.");
+    }
   };
 
   // Toggle selected location
@@ -486,7 +534,41 @@ export default function App() {
   });
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${selectedJob ? "has-selected-job" : ""}`}>
+      {/* Mobile Top Bar */}
+      <header className="mobile-top-bar">
+        <div className="mobile-logo-container">
+          <div className="logo-icon">J</div>
+          <span className="logo-text">Jinder</span>
+        </div>
+        <div className="mobile-top-bar-actions">
+          {activeTab === "jobs" && (
+            <button
+              className={`btn-mobile-scrape ${isScraping ? "scraping" : ""}`}
+              onClick={handleStartScraping}
+              disabled={isScraping}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                <path d="M16 16h5v5" />
+              </svg>
+              <span>{isScraping ? "Scanning" : "Scrape"}</span>
+            </button>
+          )}
+        </div>
+      </header>
+
       {/* Sidebar Navigation */}
       <aside className="sidebar">
         <div className="logo-container">
@@ -805,6 +887,26 @@ export default function App() {
                 {selectedJob ? (
                   <>
                     <div className="details-header">
+                      <button
+                        className="btn-back-mobile"
+                        onClick={() => setSelectedJob(null)}
+                      >
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <line x1="19" y1="12" x2="5" y2="12"></line>
+                          <polyline points="12 19 5 12 12 5"></polyline>
+                        </svg>
+                        <span>Back to Job Matches</span>
+                      </button>
+
                       <div className="details-actions-top">
                         <span
                           className={`platform-badge ${selectedJob.platform}`}
@@ -1161,6 +1263,42 @@ export default function App() {
                 </span>
               )}
             </div>
+
+            <div style={{ marginTop: "40px", borderTop: "1px solid var(--border-color)", paddingTop: "24px" }}>
+              <h3>🔄 Reevaluate CV Matching</h3>
+              <p
+                style={{
+                  color: "var(--text-secondary)",
+                  fontSize: "13px",
+                  marginTop: "8px",
+                  marginBottom: "16px",
+                }}
+              >
+                Re-run the Gemini matching logic on all existing jobs in the database. This is useful after you have updated your CV.
+              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "13px" }}>Reevaluation Batch Size:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={reevalBatchSize}
+                    onChange={(e) => setReevalBatchSize(Number(e.target.value))}
+                    style={{ width: "80px", padding: "8px", marginBottom: 0 }}
+                    disabled={isScraping}
+                  />
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleTriggerReevaluate}
+                  disabled={isScraping}
+                  type="button"
+                >
+                  {isScraping && scrapeProgress.phase === "reevaluating" ? "Reevaluating..." : "Run Reevaluation Now"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1205,6 +1343,53 @@ export default function App() {
                       <button
                         className="keyword-tag-remove"
                         onClick={() => handleRemoveKeyword(kw)}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: "32px" }}>
+              <label>Exclude Keywords</label>
+              <p
+                style={{
+                  color: "var(--text-secondary)",
+                  fontSize: "13px",
+                  marginBottom: "12px",
+                }}
+              >
+                Filter out job postings that contain any of these keywords in their title or description.
+              </p>
+
+              <div className="keyword-manager">
+                <div className="keyword-input-wrapper">
+                  <input
+                    type="text"
+                    placeholder="E.g., intern, senior, PHP"
+                    value={newExcludeKeyword}
+                    onChange={(e) => setNewExcludeKeyword(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddExcludeKeyword()}
+                  />
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={handleAddExcludeKeyword}
+                  >
+                    Add
+                  </button>
+                </div>
+
+                <div className="keyword-tags">
+                  {excludeKeywords.map((kw, idx) => (
+                    <span key={idx} className="keyword-tag">
+                      {kw}
+                      <button
+                        className="keyword-tag-remove"
+                        type="button"
+                        onClick={() => handleRemoveExcludeKeyword(kw)}
                       >
                         ×
                       </button>
@@ -1316,6 +1501,27 @@ export default function App() {
                   })}
                 </div>
               </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: "32px" }}>
+              <label>Scraping Batch Size</label>
+              <p
+                style={{
+                  color: "var(--text-secondary)",
+                  fontSize: "13px",
+                  marginBottom: "12px",
+                }}
+              >
+                Number of job postings to analyze in a single Gemini LLM call. Higher numbers reduce token usage and cost.
+              </p>
+              <input
+                type="number"
+                min="1"
+                max="50"
+                value={batchSize}
+                onChange={(e) => setBatchSize(Number(e.target.value))}
+                style={{ maxWidth: "150px" }}
+              />
             </div>
 
             <div className="form-group" style={{ marginBottom: "32px" }}>
@@ -1456,6 +1662,74 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="mobile-bottom-nav">
+        <button
+          className={`bottom-nav-item ${activeTab === "jobs" ? "active" : ""}`}
+          onClick={() => {
+            setActiveTab("jobs");
+            if (activeTab === "jobs") {
+              setSelectedJob(null);
+            }
+          }}
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect width="20" height="14" x="2" y="7" rx="2" ry="2" />
+            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+          </svg>
+          <span>Jobs</span>
+        </button>
+
+        <button
+          className={`bottom-nav-item ${activeTab === "cv" ? "active" : ""}`}
+          onClick={() => setActiveTab("cv")}
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+          <span>CV & Profile</span>
+        </button>
+
+        <button
+          className={`bottom-nav-item ${activeTab === "settings" ? "active" : ""}`}
+          onClick={() => setActiveTab("settings")}
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          <span>Settings</span>
+        </button>
+      </nav>
     </div>
   );
 }

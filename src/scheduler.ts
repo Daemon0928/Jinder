@@ -1,5 +1,6 @@
 import db from './db/database';
 import { runScraper, ScrapeReport, ScrapeProgress } from './scrapers/scraperManager';
+import { matchJobsBatchWithGemini, matchJobWithGemini } from './matcher/gemini';
 
 export interface SchedulerStatus {
   enabled: boolean;
@@ -291,6 +292,186 @@ export class SchedulerService {
     } catch (err) {
       console.error('Failed to query last run summary:', err);
       return null;
+    }
+  }
+
+  public async runReevaluation(customBatchSize?: number): Promise<void> {
+    if (this.isRunning) {
+      throw new Error('A scraping or reevaluation job is already running');
+    }
+
+    this.isRunning = true;
+
+    // Initialize progress
+    this.progress = {
+      isScraping: true,
+      phase: 'reevaluating',
+      currentJobIndex: 0,
+      totalJobs: 0,
+      currentJobTitle: '',
+      currentKeyword: '',
+      keywordIndex: 0,
+      totalKeywords: 0,
+      newJobs: 0,
+      matched: 0,
+      skipped: 0,
+      errors: 0,
+    };
+
+    try {
+      // 1. Get all jobs in DB
+      const allJobs = db.prepare('SELECT id, job_id, platform, title, company, location, link, description FROM jobs').all() as any[];
+      this.progress.totalJobs = allJobs.length;
+
+      if (allJobs.length === 0) {
+        this.progress.isScraping = false;
+        this.progress.phase = 'done';
+        this.isRunning = false;
+        return;
+      }
+
+      // Determine batch size (prioritize customBatchSize -> database config -> default 10)
+      let BATCH_SIZE = 10;
+      if (customBatchSize !== undefined && customBatchSize > 0) {
+        BATCH_SIZE = customBatchSize;
+      } else {
+        const batchSizeRow = db.prepare("SELECT value FROM config WHERE key = 'batch_size'").get() as { value: string } | undefined;
+        if (batchSizeRow) {
+          const parsed = parseInt(batchSizeRow.value, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            BATCH_SIZE = parsed;
+          }
+        }
+      }
+
+      const updateStmt = db.prepare(`
+        UPDATE jobs
+        SET title = ?,
+            company = ?,
+            location = ?,
+            parsed_json = ?,
+            match_score = ?,
+            match_pros = ?,
+            match_cons = ?,
+            match_justification = ?
+        WHERE id = ?
+      `);
+
+      // Match in batches
+      for (let b = 0; b < allJobs.length; b += BATCH_SIZE) {
+        const batch = allJobs.slice(b, b + BATCH_SIZE);
+        
+        this.progress.currentJobIndex = b;
+        this.progress.currentJobTitle = batch.map(j => j.title).join(', ');
+
+        const batchInput = batch.map(j => ({
+          title: j.title,
+          company: j.company,
+          description: j.description,
+        }));
+
+        let matchResults: any[] | null = null;
+        try {
+          matchResults = await matchJobsBatchWithGemini(batchInput);
+          if (!matchResults || matchResults.length !== batch.length) {
+            throw new Error('Batch matching failed or returned incomplete results');
+          }
+        } catch (batchErr: any) {
+          console.warn(`Reevaluation batch matching failed, falling back to individual:`, batchErr.message);
+          this.progress.errors++;
+
+          // Fallback to individual
+          matchResults = [];
+          for (let idx = 0; idx < batch.length; idx++) {
+            const item = batch[idx];
+            try {
+              const result = await matchJobWithGemini(item.title, item.company, item.description);
+              if (result) {
+                matchResults.push({
+                  ...result,
+                  index: idx,
+                });
+              }
+            } catch (indivErr: any) {
+              console.error(`Reevaluation individual fallback matching failed for job ${item.id}:`, indivErr.message);
+              this.progress.errors++;
+            }
+          }
+        }
+
+        // Save updated scores to database
+        for (const res of matchResults) {
+          const job = batch[res.index];
+          if (!job) continue;
+
+          try {
+            const finalTitle = res.parsedJob.title || job.title;
+            const finalCompany = res.parsedJob.company || job.company;
+            const finalLocation = res.parsedJob.location || job.location;
+            const parsedJsonStr = JSON.stringify(res.parsedJob);
+            const score = res.matchScore;
+            const prosStr = JSON.stringify(res.pros);
+            const consStr = JSON.stringify(res.cons);
+            const justification = res.justification;
+
+            updateStmt.run(
+              finalTitle,
+              finalCompany,
+              finalLocation,
+              parsedJsonStr,
+              score,
+              prosStr,
+              consStr,
+              justification,
+              job.id
+            );
+
+            this.progress.matched++;
+
+            // Trigger discord webhook if score >= 80%
+            if (score >= 80) {
+              try {
+                const webhookRow = db
+                  .prepare("SELECT value FROM config WHERE key = 'discord_webhook'")
+                  .get() as { value: string } | undefined;
+                const webhookUrl = webhookRow?.value;
+                if (webhookUrl && webhookUrl.startsWith('http')) {
+                  const payload = {
+                    content: `🎉 **Reevaluated Highly Matched Job: ${score}%**\n**Title:** ${finalTitle}\n**Company:** ${finalCompany}\n**Location:** ${finalLocation}\n[View Job Details](${job.link})`,
+                    embeds: [
+                      {
+                        title: "AI Match Justification (Reevaluated)",
+                        description: justification.substring(0, 2048),
+                        color: 3447003,
+                      },
+                    ],
+                  };
+                  await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                  });
+                }
+              } catch (webhookErr: any) {
+                console.error('Failed to send Discord webhook for reevaluation:', webhookErr.message);
+              }
+            }
+          } catch (saveError: any) {
+            console.error(`Error saving reevaluated job ${job.id}:`, saveError.message);
+            this.progress.errors++;
+          }
+        }
+      }
+
+      this.progress.currentJobIndex = allJobs.length;
+      this.progress.phase = 'done';
+      this.progress.isScraping = false;
+    } catch (err: any) {
+      console.error('Reevaluation failed:', err.message);
+      this.progress.phase = 'done';
+      this.progress.isScraping = false;
+    } finally {
+      this.isRunning = false;
     }
   }
 }

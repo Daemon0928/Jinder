@@ -1,0 +1,84 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: J
+      - generic [ref=e7]: Jinder
+    - button "Scrape" [ref=e9] [cursor=pointer]:
+      - img [ref=e10]
+      - generic [ref=e15]: Scrape
+  - main [ref=e16]:
+    - generic [ref=e38]:
+      - generic [ref=e39]:
+        - button "Back to Job Matches" [ref=e4495] [cursor=pointer]:
+          - img [ref=e4496]
+          - generic [ref=e4498]: Back to Job Matches
+        - generic [ref=e4499]:
+          - generic [ref=e4500]: nofluffjobs
+          - generic [ref=e4501]:
+            - button "Open Posting ↗" [ref=e4502] [cursor=pointer]
+            - button "Delete" [ref=e4503] [cursor=pointer]
+        - heading "Medior FullStack Developer (.Net & Angular)" [level=2] [ref=e4504]
+        - generic [ref=e4505]: TechGenius Recruitment Kft.
+        - generic [ref=e4506]:
+          - generic [ref=e4507]: 📍 Hungary
+          - generic [ref=e4508]: "📅 Found: 08/06/2026"
+          - generic [ref=e4509]: 💰 Not specified
+      - generic [ref=e4510]:
+        - generic [ref=e4511]:
+          - generic [ref=e4512]: 🤖 AI Match Assessment
+          - generic [ref=e4513]:
+            - strong [ref=e4514]: "Gemini score: 90%"
+            - text: — This role is an excellent fit for Márk as he possesses the exact tech stack (C#, .NET, Angular) and the required 3+ years of experience. While he lacks specific mention of Azure, his existing DevOps and microservices experience makes him highly competitive for this position.
+        - generic [ref=e4515]:
+          - generic [ref=e4516]:
+            - generic [ref=e4517]: ✔️ Strengths & Fits
+            - generic [ref=e4518]:
+              - generic [ref=e4519]: ✓
+              - generic [ref=e4520]: "Perfect alignment with core technical requirements: .NET and Angular"
+            - generic [ref=e4521]:
+              - generic [ref=e4522]: ✓
+              - generic [ref=e4523]: Strong background in SQL databases and ORM, matching the job's focus
+            - generic [ref=e4524]:
+              - generic [ref=e4525]: ✓
+              - generic [ref=e4526]: Matches the required 3+ years of professional experience
+            - generic [ref=e4527]:
+              - generic [ref=e4528]: ✓
+              - generic [ref=e4529]: Experience with DevOps and team tools aligns well with the Git/GitFlow and cloud-based systems requirements
+          - generic [ref=e4530]:
+            - generic [ref=e4531]: ⚠️ Gaps or Requirements
+            - generic [ref=e4532]:
+              - generic [ref=e4533]: "!"
+              - generic [ref=e4534]: Azure experience is not explicitly listed in the CV
+            - generic [ref=e4535]:
+              - generic [ref=e4536]: "!"
+              - generic [ref=e4537]: No specific mention of unit and integration testing frameworks
+            - generic [ref=e4538]:
+              - generic [ref=e4539]: "!"
+              - generic [ref=e4540]: NoSQL experience is listed, but not specifically highlighted as a core strength for this role
+        - generic [ref=e4541]:
+          - generic [ref=e4542]: 🛠️ Technology Stack
+          - generic [ref=e4543]:
+            - generic [ref=e4544]: .NET
+            - generic [ref=e4545]: Angular
+            - generic [ref=e4546]: Git
+            - generic [ref=e4547]: SQL
+            - generic [ref=e4548]: Azure
+            - generic [ref=e4549]: DevOps
+            - generic [ref=e4550]: NoSQL
+        - generic [ref=e4551]:
+          - generic [ref=e4552]: 📝 Job Summary
+          - paragraph [ref=e4553]: The role involves developing and maintaining modern software solutions based on .NET and Angular. The candidate will work on microservice and cloud-based architectures while ensuring code quality through unit and integration testing.
+      - generic [ref=e4554]:
+        - button "Bookmark" [ref=e4555] [cursor=pointer]
+        - button "Applied" [ref=e4556] [cursor=pointer]
+        - button "Reject" [ref=e4557] [cursor=pointer]
+  - navigation [ref=e43]:
+    - button "Jobs" [ref=e44] [cursor=pointer]:
+      - img [ref=e45]
+      - generic [ref=e48]: Jobs
+    - button "CV & Profile" [ref=e49] [cursor=pointer]:
+      - img [ref=e50]
+      - generic [ref=e53]: CV & Profile
+    - button "Settings" [ref=e54] [cursor=pointer]:
+      - img [ref=e55]
+      - generic [ref=e58]: Settings

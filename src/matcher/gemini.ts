@@ -194,7 +194,7 @@ ${rawHtmlOrText}
 
 Perform the following tasks:
 1. Parse the job listing into clean, structured details (title, company, location, simplified description, tech stack, and salary if mentioned). If the listing is in Hungarian, please translate these parsed details to English for the user.
-2. Evaluate the match between the job description and the user's CV. Provide a matchScore (0 to 100).
+2. Evaluate the match between the job description and the user's CV. Provide a matchScore (0 to 100). CRITICAL: Lack of experience or seniority must carry heavy weight. If there is a significant discrepancy between the user's years of experience and the job's required years of experience (for example, if the job requires 5+ years of experience but the user has only 3 years, or generally if the user lacks the required seniority/experience level), the matchScore MUST NOT exceed 75% (it must be capped at 75% maximum).
 3. List 2-4 pros (reasons why it's a good match).
 4. List 2-4 cons or missing requirements (technologies or experiences required/preferred that the user lacks or doesn't emphasize in their CV).
 5. Provide a 2-3 sentence justification explaining the overall rating.
@@ -391,7 +391,7 @@ ${jobsFormatted}
 Perform the following tasks for each job in the list:
 1. Identify the job by its "index" (the 0-based Job Index provided in the list).
 2. Parse the job listing into clean, structured details (title, company, location, simplified description, tech stack, and salary if mentioned). If the listing is in Hungarian, please translate these parsed details to English for the user.
-3. Evaluate the match between the job description and the user's CV. Provide a matchScore (0 to 100).
+3. Evaluate the match between the job description and the user's CV. Provide a matchScore (0 to 100). CRITICAL: Lack of experience or seniority must carry heavy weight. If there is a significant discrepancy between the user's years of experience and the job's required years of experience (for example, if the job requires 5+ years of experience but the user has only 3 years, or generally if the user lacks the required seniority/experience level), the matchScore MUST NOT exceed 75% (it must be capped at 75% maximum).
 4. List 2-4 pros (reasons why it's a good match).
 5. List 2-4 cons or missing requirements (technologies or experiences required/preferred that the user lacks or doesn't emphasize in their CV).
 6. Provide a 2-3 sentence justification explaining the overall rating.

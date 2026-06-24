@@ -134,7 +134,7 @@ async function run() {
         if (tc.id === 'E2E-T1-04' || tc.id === 'E2E-T1-05' || tc.id === 'E2E-T1-06' || 
             tc.id === 'E2E-T1-07' || tc.id === 'E2E-T1-08' || tc.id === 'E2E-T1-09' || 
             tc.id === 'E2E-T1-10' || tc.id === 'E2E-T1-11' || tc.id === 'E2E-T1-20' ||
-            tc.id === 'E2E-T3-04') {
+            tc.id === 'E2E-T3-04' || tc.id === 'E2E-T4-08') {
           seedJobsTable([
             {
               id: 1,
@@ -212,6 +212,23 @@ async function run() {
           }
           case 'api_scrape_trigger': {
             const res = await axios.post('http://localhost:5000/api/scrape');
+            responseStatus = res.status;
+            responseData = res.data;
+
+            // Wait for scrape background task to finish (check phase == 'done')
+            let isDone = false;
+            for (let attempt = 0; attempt < 100; attempt++) {
+              await new Promise((resolve) => setTimeout(resolve, 200));
+              const statusRes = await axios.get('http://localhost:5000/api/scrape/status');
+              if (statusRes.data && statusRes.data.phase === 'done' && !statusRes.data.isScraping) {
+                isDone = true;
+                break;
+              }
+            }
+            break;
+          }
+          case 'api_scrape_reevaluate': {
+            const res = await axios.post('http://localhost:5000/api/scrape/reevaluate', tc.execute.params);
             responseStatus = res.status;
             responseData = res.data;
 

@@ -37,7 +37,11 @@ By comparing your CV against scraped job descriptions using Gemini LLM, Jinder r
 - **Gemini Semantic Matching**:
   - Analyzes Hungarian/English postings, translates details to English, and matches them against the CV.
   - Computes a match score (0-100%), extracts 2-4 pros and cons, and generates a clear justification.
-  - **Batch Matching**: Matches jobs in groups of up to 10 in a single Gemini API call to significantly reduce token usage and API costs (with a robust individual fallback).
+  - **Experience Weighting**: Prioritizes experience alignment. Match score is capped at 75% max if there is a significant experience/seniority gap (e.g., job requires 5+ years, user has 3 years).
+  - **Batch Matching**: Matches jobs in groups (configurable batch size, default 10) in a single Gemini API call to significantly reduce token usage and API costs (with a robust individual fallback).
+  - **CV Reevaluation**: Trigger matching reevaluation for all existing scraped jobs in the database using a custom batch size.
+- **Exclude Keywords Filtering**:
+  - Prevent undesired jobs from being matched or saved by specifying exclude keywords (checked against titles before fetching details, and against description text post-fetch).
 - **Discord Alerting Webhook**:
   - Instantly broadcasts formatted alerts (including matching scores, links, and justifications) to a Discord channel if a job score is $\ge 80\%$.
 - **Automated Background Scheduler**:
@@ -46,8 +50,9 @@ By comparing your CV against scraped job descriptions using Gemini LLM, Jinder r
   - Monitors detailed run results (new jobs, matched count, errors) through a dedicated `scrape_history` view.
 - **Responsive Web Dashboard**:
   - React (v19) + Vite frontend to track applications.
-  - Drag-and-drop PDF uploader, scheduler configuration form, target company manager, keyword/location filters, and detailed job dialogs.
+  - Drag-and-drop PDF uploader, scheduler configuration form, target company manager, keyword/location/exclude-keyword filters, batch size fields, manual CV matcher trigger, and detailed job dialogs.
   - Categorize jobs into `new`, `bookmarked`, `applied`, and `rejected` states.
+
 
 ---
 
@@ -297,7 +302,7 @@ Stores details of all scraped and matched vacancies.
 Stores configuration key-value pairs.
 - `key` (TEXT, Primary Key)
 - `value` (TEXT)
-- *Preseeded Keys*: `scheduler_interval_hours` (default `'4'`), `scheduler_enabled` (default `'false'`). Other dynamic keys: `cv`, `cv_summary`, `cv_filename`, `keywords`, `locations`, `companies`, `discord_webhook`.
+- *Preseeded Keys*: `scheduler_interval_hours` (default `'4'`), `scheduler_enabled` (default `'false'`). Other dynamic keys: `cv`, `cv_summary`, `cv_filename`, `keywords`, `exclude_keywords`, `locations`, `companies`, `discord_webhook`, `batch_size`.
 
 ### 3. `career_page_cache`
 Caches company career page URLs to avoid repeating search-engine queries.
@@ -326,25 +331,31 @@ The orchestrator in [scraperManager.ts](file:///C:/Users/mark2/repos/Jinder/src/
 
 1. **Search & Discovery**:
    - Executes queries across active scrapers (Profession, No Fluff Jobs, and Company Careers).
-   - Combines results in-memory and filters out duplicates against existing database records based on `job_id`.
+   - Combines results in-memory.
+   - Filters out duplicates against existing database records based on `job_id`.
+   - Filters out jobs containing any configured **Exclude Keywords** (matching on job title at this stage to avoid unnecessary details fetches).
 2. **Polite Detail Extraction**:
    - For all new listings, the runner visits detail pages sequentially.
    - Restricts rate by introducing a **1.5-second sleep interval** between fetches.
+   - Once detail text is fetched, checks again for **Exclude Keywords** (matching on job description text) and drops any matches.
 3. **LLM Evaluation**:
-   - Packages new listings into batches of up to 10.
+   - Packages new listings into batches of configurable size (defaults to 10, editable in settings).
    - Submits the CV and batch payload to Gemini using a structured JSON Schema.
+   - **Experience Weighting**: The AI model weights years of experience mismatch heavily; if the job required experience level exceeds the user's CV experience significantly (e.g. user has 3 years, job requires 5+), the score is capped at a maximum of 75%.
    - If a batch call fails (e.g. due to context length or connection limits), it transparently falls back to individual evaluations.
    - Saves final records in SQLite and sends webhook notifications if applicable.
 
 ---
 
-## Background Scheduler & History
+## Background Scheduler, History & Reevaluation
 
-The background service in [scheduler.ts](file:///C:/Users/mark2/repos/Jinder/src/scheduler.ts) manages periodic execution:
+The background service in [scheduler.ts](file:///C:/Users/mark2/repos/Jinder/src/scheduler.ts) manages periodic execution and reevaluation:
 - Automatically loads status from database config upon server bootstrap.
 - Uses standard JS intervals to coordinate execution loops without locking thread execution.
-- Exposes detailed real-time progress indicators: current phase, active keyword index, total matching progress, and encountered error count.
+- Exposes detailed real-time progress indicators: current phase (including `'reevaluating'`), active keyword index, total matching progress, and encountered error count.
 - Logs historical metrics in `scrape_history` for user review.
+- **CV Reevaluation**: Allows reevaluating all existing jobs in the database (e.g. after uploading a new CV) using a customizable batch size.
+
 
 ---
 

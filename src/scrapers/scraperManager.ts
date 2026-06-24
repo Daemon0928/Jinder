@@ -21,7 +21,7 @@ export interface ScrapeReport {
 }
 
 export interface ScrapeProgress {
-  phase: "searching" | "fetching" | "matching" | "saving" | "done";
+  phase: "searching" | "fetching" | "matching" | "saving" | "done" | "reevaluating";
   currentJobIndex: number;
   totalJobs: number;
   currentJobTitle: string;
@@ -32,6 +32,21 @@ export interface ScrapeProgress {
   matched: number;
   skipped: number;
   errors: number;
+}
+
+function matchesExcludeKeywords(
+  title: string,
+  description: string,
+  excludeKeywords: string[],
+): boolean {
+  if (excludeKeywords.length === 0) return false;
+  const lowerTitle = title.toLowerCase();
+  const lowerDesc = description.toLowerCase();
+  return excludeKeywords.some((kw) => {
+    const lowerKw = kw.toLowerCase().trim();
+    if (!lowerKw) return false;
+    return lowerTitle.includes(lowerKw) || lowerDesc.includes(lowerKw);
+  });
 }
 
 export type ProgressCallback = (progress: Partial<ScrapeProgress>) => void;
@@ -57,6 +72,25 @@ export async function runScraper(
       currentJobIndex: 0,
       totalJobs: 0,
     });
+
+    // Fetch exclude keywords from config
+    const excludeKwRow = db
+      .prepare("SELECT value FROM config WHERE key = 'exclude_keywords'")
+      .get() as { value: string } | undefined;
+    const rawExcludeKeywords = excludeKwRow ? JSON.parse(excludeKwRow.value) : [];
+    const excludeKeywords: string[] = Array.isArray(rawExcludeKeywords) ? rawExcludeKeywords : [];
+
+    // Fetch batch size from config
+    const batchSizeRow = db
+      .prepare("SELECT value FROM config WHERE key = 'batch_size'")
+      .get() as { value: string } | undefined;
+    let BATCH_SIZE = 10;
+    if (batchSizeRow) {
+      const parsed = parseInt(batchSizeRow.value, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        BATCH_SIZE = parsed;
+      }
+    }
 
     // Fetch selected locations from config
     const locRow = db
@@ -155,6 +189,18 @@ export async function runScraper(
           continue; // Skip already scraped jobs
         }
 
+        // Check if job matches exclude keywords (title level check before details fetch)
+        if (matchesExcludeKeywords(job.title, "", excludeKeywords)) {
+          console.log(`Skipping job "${job.title}" (matches exclude keywords in title)`);
+          skipped++;
+          onProgress?.({
+            currentJobIndex: i + 1,
+            currentJobTitle: job.title,
+            skipped,
+          });
+          continue;
+        }
+
         report.newJobsCount++;
         console.log(
           `Processing new job details fetch: ${job.title} at ${job.company}`,
@@ -186,6 +232,18 @@ export async function runScraper(
           continue;
         }
 
+        // Check if job matches exclude keywords (description level check after details fetch)
+        if (matchesExcludeKeywords(job.title, detailText, excludeKeywords)) {
+          console.log(`Skipping job "${job.title}" (matches exclude keywords in description)`);
+          skipped++;
+          onProgress?.({
+            currentJobIndex: i + 1,
+            currentJobTitle: job.title,
+            skipped,
+          });
+          continue;
+        }
+
         newJobsToMatch.push({ job, detailText });
 
         // Add 1.5 seconds delay between scraping details to be polite
@@ -206,7 +264,6 @@ export async function runScraper(
     }
 
     // 3. Batch matching with fallback
-    const BATCH_SIZE = 10;
     for (let b = 0; b < newJobsToMatch.length; b += BATCH_SIZE) {
       const batch = newJobsToMatch.slice(b, b + BATCH_SIZE);
       console.log(

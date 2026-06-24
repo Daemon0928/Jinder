@@ -1,0 +1,47 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: J
+      - generic [ref=e7]: Jinder
+    - button "Scrape" [ref=e9] [cursor=pointer]:
+      - img [ref=e10]
+      - generic [ref=e15]: Scrape
+  - main [ref=e16]:
+    - generic [ref=e18]:
+      - heading "Your Job Matches" [level=1] [ref=e19]
+      - paragraph [ref=e20]: AI-scored job postings scraped from Hungarian portals
+    - generic [ref=e21]:
+      - generic [ref=e22]:
+        - generic [ref=e23]: Search Text
+        - textbox "Filter by title, company, stack..." [ref=e24]
+      - generic [ref=e25]:
+        - generic [ref=e26]: Status
+        - combobox [ref=e27]:
+          - option "All Jobs" [selected]
+          - option "New Matches"
+          - option "Bookmarked"
+          - option "Applied"
+          - option "Not Interested"
+      - generic [ref=e28]:
+        - generic [ref=e29]: Min Match Score
+        - generic [ref=e30]:
+          - slider [ref=e31]: "0"
+          - generic [ref=e32]: 0%
+    - generic [ref=e33]:
+      - generic [ref=e35]:
+        - generic [ref=e36]: 📭
+        - paragraph [ref=e37]: No job matches found. Click "Scrape Portals Now" to fetch new jobs.
+      - generic [ref=e39]:
+        - generic [ref=e40]: 👈
+        - heading "Select a Job" [level=3] [ref=e41]
+        - paragraph [ref=e42]: Select a job from the list to view the AI match details and apply.
+  - navigation [ref=e43]:
+    - button "Jobs" [ref=e44] [cursor=pointer]:
+      - img [ref=e45]
+      - generic [ref=e48]: Jobs
+    - button "CV & Profile" [ref=e49] [cursor=pointer]:
+      - img [ref=e50]
+      - generic [ref=e53]: CV & Profile
+    - button "Settings" [ref=e54] [cursor=pointer]:
+      - img [ref=e55]
+      - generic [ref=e58]: Settings

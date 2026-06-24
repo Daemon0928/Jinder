@@ -1018,3 +1018,81 @@ for (let i = 1; i <= 5; i++) {
     assertions
   });
 }
+
+testCases.push({
+  id: 'E2E-T4-06',
+  name: 'GET /api/config contains excludeKeywords and batchSize',
+  tier: 4,
+  description: 'Verifies that config payload has new finesse keys.',
+  configSetup: {},
+  mockServerBehavior: {},
+  execute: { action: 'api_config_get' },
+  assertions: {
+    status: 200,
+    responseBodyContains: ['excludeKeywords', 'batchSize']
+  }
+});
+
+testCases.push({
+  id: 'E2E-T4-07',
+  name: 'POST /api/config saves excludeKeywords and batchSize',
+  tier: 4,
+  description: 'Verifies config post updates config table with finesse keys.',
+  configSetup: {},
+  mockServerBehavior: {},
+  execute: {
+    action: 'api_config_post',
+    params: {
+      excludeKeywords: ['intern', 'junior'],
+      batchSize: 5
+    }
+  },
+  assertions: {
+    status: 200,
+    dbState: {
+      table: 'config',
+      where: "key = 'exclude_keywords' OR key = 'batch_size'",
+      expectedRows: [
+        { key: 'exclude_keywords', value: '["intern","junior"]' },
+        { key: 'batch_size', value: '5' }
+      ]
+    }
+  }
+});
+
+testCases.push({
+  id: 'E2E-T4-08',
+  name: 'POST /api/scrape/reevaluate runs successfully',
+  tier: 4,
+  description: 'Checks reevaluation triggering on pre-seeded job.',
+  configSetup: {
+    cvText: 'Test CV'
+  },
+  mockServerBehavior: {
+    geminiStatus: 200,
+    geminiPayload: {
+      matchScore: 78,
+      pros: ['A'],
+      cons: [],
+      justification: 'J',
+      parsedJob: { title: 'Test Job 1', company: 'Test Company 1', location: 'Budapest', description: 'D', techStack: [], salary: '' }
+    }
+  },
+  execute: {
+    action: 'api_scrape_reevaluate',
+    params: { batchSize: 2 }
+  },
+  assertions: {
+    status: 200,
+    responseBodyContains: ['started', 'Reevaluation process initiated'],
+    dbState: {
+      table: 'jobs',
+      count: 1,
+      where: "job_id = 'profession-mock-1'",
+      expectedRows: [
+        { job_id: 'profession-mock-1', match_score: 78 }
+      ]
+    }
+  }
+});
+

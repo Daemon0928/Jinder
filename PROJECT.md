@@ -12,12 +12,14 @@
 ## Milestones
 | Track / Milestone | Scope | Assigned Agent | Status |
 |---|---|---|---|
-| **E2E Testing Track** | Design test cases, build E2E suite, publish `TEST_READY.md` | E2E Sub-orch Gen 3 (`623b077f-ff76-4abc-8036-eff548bfbcee`) | IN_PROGRESS |
-| **Implementation Track** | Drive milestones IMP-M1 through IMP-M4 below | Imp Sub-orch Gen 5 (`190c1049-3d55-4a2b-b434-5ff1642646ac`) | IN_PROGRESS |
+| **E2E Testing Track** | Design test cases, build E2E suite, publish `TEST_READY.md` | E2E Sub-orch Gen 3 (`623b077f-ff76-4abc-8036-eff548bfbcee`) | DONE |
+| **Implementation Track** | Drive milestones IMP-M1 through IMP-M4 below | Imp Sub-orch Gen 5 (`190c1049-3d55-4a2b-b434-5ff1642646ac`) | DONE |
 | M1: Scraper Development | Create `src/scrapers/nofluffjobs.ts` | Delegated to Imp Sub-orch | DONE |
-| M2: Scraper Manager | Integrate into `scraperManager.ts`, locations mapping, sqlite save | Delegated to Imp Sub-orch | PLANNED |
-| M3: Gemini & Webhooks | Semantic matching, score >= 80% Discord alerts | Delegated to Imp Sub-orch | PLANNED |
-| M4: Final verification | E2E test passes & adversarial coverage hardening | Delegated to Imp Sub-orch | PLANNED |
+| M2: Scraper Manager | Integrate into `scraperManager.ts`, locations mapping, sqlite save | Delegated to Imp Sub-orch | DONE |
+| M3: Gemini & Webhooks | Semantic matching, score >= 80% Discord alerts | Delegated to Imp Sub-orch | DONE |
+| M4: Final verification | E2E test passes & adversarial coverage hardening | Delegated to Imp Sub-orch | DONE |
+| M5: Finesse & Polishing | UI overflow fixes, experience logic weight caps, exclude keywords, dynamic batch sizes, CV reevaluation | Antigravity | DONE |
+
 
 ## Interface Contracts
 ### `src/scrapers/nofluffjobs.ts` ↔ `src/scrapers/scraperManager.ts`

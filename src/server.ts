@@ -120,11 +120,13 @@ app.get('/api/config', (req, res) => {
   try {
     const cvRow = db.prepare("SELECT value FROM config WHERE key = 'cv'").get() as { value: string } | undefined;
     const kwRow = db.prepare("SELECT value FROM config WHERE key = 'keywords'").get() as { value: string } | undefined;
+    const excludeKwRow = db.prepare("SELECT value FROM config WHERE key = 'exclude_keywords'").get() as { value: string } | undefined;
     const cvFileRow = db.prepare("SELECT value FROM config WHERE key = 'cv_filename'").get() as { value: string } | undefined;
     const cvSummaryRow = db.prepare("SELECT value FROM config WHERE key = 'cv_summary'").get() as { value: string } | undefined;
     const discordWebhookRow = db.prepare("SELECT value FROM config WHERE key = 'discord_webhook'").get() as { value: string } | undefined;
     const locationsRow = db.prepare("SELECT value FROM config WHERE key = 'locations'").get() as { value: string } | undefined;
     const companiesRow = db.prepare("SELECT value FROM config WHERE key = 'companies'").get() as { value: string } | undefined;
+    const batchSizeRow = db.prepare("SELECT value FROM config WHERE key = 'batch_size'").get() as { value: string } | undefined;
 
     let keywords: string[] = [];
     try {
@@ -132,6 +134,14 @@ app.get('/api/config', (req, res) => {
       if (!Array.isArray(keywords)) keywords = [];
     } catch (e) {
       keywords = [];
+    }
+
+    let excludeKeywords: string[] = [];
+    try {
+      excludeKeywords = excludeKwRow ? JSON.parse(excludeKwRow.value) : [];
+      if (!Array.isArray(excludeKeywords)) excludeKeywords = [];
+    } catch (e) {
+      excludeKeywords = [];
     }
 
     let locations: string[] = [];
@@ -150,14 +160,22 @@ app.get('/api/config', (req, res) => {
       companies = [];
     }
 
+    let batchSize = 10;
+    if (batchSizeRow) {
+      const parsed = parseInt(batchSizeRow.value, 10);
+      if (!isNaN(parsed) && parsed > 0) batchSize = parsed;
+    }
+
     res.json({
       cv: cvRow ? cvRow.value : '',
       keywords,
+      excludeKeywords,
       cvFilename: cvFileRow ? cvFileRow.value : null,
       cvSummary: cvSummaryRow ? cvSummaryRow.value : null,
       discordWebhook: discordWebhookRow ? discordWebhookRow.value : '',
       locations,
-      companies
+      companies,
+      batchSize
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -167,7 +185,7 @@ app.get('/api/config', (req, res) => {
 // Save configuration (CV and keywords)
 app.post('/api/config', (req, res) => {
   try {
-    const { cv, keywords, discordWebhook, locations, companies } = req.body;
+    const { cv, keywords, excludeKeywords, discordWebhook, locations, companies, batchSize } = req.body;
 
     const upsertStmt = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
     
@@ -176,6 +194,12 @@ app.post('/api/config', (req, res) => {
     }
     if (keywords !== undefined) {
       upsertStmt.run('keywords', JSON.stringify(keywords));
+    }
+    if (excludeKeywords !== undefined) {
+      if (!Array.isArray(excludeKeywords)) {
+        return res.status(400).json({ error: 'Exclude keywords must be an array of strings' });
+      }
+      upsertStmt.run('exclude_keywords', JSON.stringify(excludeKeywords));
     }
     if (discordWebhook !== undefined) {
       upsertStmt.run('discord_webhook', discordWebhook);
@@ -188,6 +212,13 @@ app.post('/api/config', (req, res) => {
         return res.status(400).json({ error: 'Companies must be an array of strings' });
       }
       upsertStmt.run('companies', JSON.stringify(companies));
+    }
+    if (batchSize !== undefined) {
+      const parsed = parseInt(batchSize, 10);
+      if (isNaN(parsed) || parsed <= 0) {
+        return res.status(400).json({ error: 'Batch size must be a positive integer' });
+      }
+      upsertStmt.run('batch_size', String(parsed));
     }
 
     res.json({ success: true });
@@ -306,6 +337,26 @@ app.post('/api/scrape', (req, res) => {
   // Run scraper in the background so API call returns immediately
   schedulerService.runNow().catch((err: any) => {
     console.error('Manual background scraping run failed:', err.message);
+  });
+});
+
+// Trigger a CV reevaluation run for all existing jobs in the database
+app.post('/api/scrape/reevaluate', (req, res) => {
+  if (schedulerService.getStatus().isRunning) {
+    return res.status(429).json({ error: 'A scraping or reevaluation job is already running' });
+  }
+
+  const { batchSize } = req.body;
+
+  // Set progress state synchronously to prevent race conditions in test suite
+  schedulerService.progress.isScraping = true;
+  schedulerService.progress.phase = 'reevaluating';
+
+  res.json({ status: 'started', message: 'Reevaluation process initiated in background' });
+
+  // Run reevaluation in background
+  schedulerService.runReevaluation(batchSize ? Number(batchSize) : undefined).catch((err: any) => {
+    console.error('Manual background reevaluation run failed:', err.message);
   });
 });
 
