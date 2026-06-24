@@ -35,3 +35,6 @@ vault/
 
 # Playwright mcp artifacts
 .playwright-mcp/
+
+# AI agent artifacts
+.agents/

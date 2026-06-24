@@ -1,9 +1,0 @@
-## Current Status
-Last visited: 2026-06-05T19:10:00+02:00
-- [x] No Fluff Jobs Scraper (IMP-M1) (Completed by previous run, see worker_impm1/handoff.md)
-- [/] Scraper Manager & DB Integration (IMP-M2) (Explorers analyzing)
-- [ ] Gemini & Webhook Verification (IMP-M3)
-- [ ] E2E Integration and Hardening (IMP-M4)
-
-## Iteration Status
-Current iteration: 1 / 32
