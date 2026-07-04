@@ -1,3 +1,8 @@
+# Development Log (internal)
+
+> Historical notes from the initial build of the No Fluff Jobs scraper track.
+> For user-facing documentation see the root [README.md](../README.md).
+
 # Project: Jinder No Fluff Jobs Scraper Support
 
 ## Architecture

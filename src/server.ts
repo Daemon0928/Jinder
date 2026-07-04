@@ -6,19 +6,23 @@ import fs from 'fs';
 import multer from 'multer';
 import { PDFParse } from 'pdf-parse';
 import db, { initDatabase } from './db/database';
-import { runScraper } from './scrapers/scraperManager';
 import { summarizeCv } from './matcher/gemini';
 import { schedulerService } from './scheduler';
 
-// Load environment variables from root directory
+// Load environment variables from root directory (before modules that read env)
 dotenv.config();
+
+import { requireAuth, warnIfAuthDisabled } from './middleware/auth';
+import { isValidDiscordWebhookUrl } from './lib/urlSafety';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS and JSON parsing
-app.use(cors());
+// In dev the Vite proxy makes API calls same-origin, and in production the
+// frontend is served by this server — so only the configured origin needs CORS.
+app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173' }));
 app.use(express.json({ limit: '10mb' })); // Support larger CV uploads
+app.use('/api', requireAuth);
 
 // Configure multer for in-memory file uploads (PDF)
 const upload = multer({
@@ -35,6 +39,14 @@ const upload = multer({
 
 // Initialize database
 initDatabase();
+
+// Masking for secrets echoed to the UI: keep only the tail so the user can
+// recognize which webhook is configured without exposing the token.
+const MASK_CHAR = '•';
+function maskSecret(value: string): string {
+  const tail = value.slice(-6);
+  return `${MASK_CHAR.repeat(8)}${tail}`;
+}
 
 // --- API Endpoints ---
 
@@ -172,7 +184,10 @@ app.get('/api/config', (req, res) => {
       excludeKeywords,
       cvFilename: cvFileRow ? cvFileRow.value : null,
       cvSummary: cvSummaryRow ? cvSummaryRow.value : null,
-      discordWebhook: discordWebhookRow ? discordWebhookRow.value : '',
+      // Never echo the full webhook back — it's a write-capable secret.
+      // The mask keeps the field visibly "set" in the UI; POST ignores masked values.
+      discordWebhook: discordWebhookRow && discordWebhookRow.value ? maskSecret(discordWebhookRow.value) : '',
+      discordWebhookSet: Boolean(discordWebhookRow && discordWebhookRow.value),
       locations,
       companies,
       batchSize
@@ -201,7 +216,10 @@ app.post('/api/config', (req, res) => {
       }
       upsertStmt.run('exclude_keywords', JSON.stringify(excludeKeywords));
     }
-    if (discordWebhook !== undefined) {
+    if (discordWebhook !== undefined && typeof discordWebhook === 'string' && !discordWebhook.includes(MASK_CHAR)) {
+      if (discordWebhook !== '' && !isValidDiscordWebhookUrl(discordWebhook)) {
+        return res.status(400).json({ error: 'Discord webhook must be a https://discord.com/api/webhooks/... URL' });
+      }
       upsertStmt.run('discord_webhook', discordWebhook);
     }
     if (locations !== undefined) {
@@ -498,5 +516,6 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 // Start server
 app.listen(PORT, () => {
+  warnIfAuthDisabled();
   console.log(`Backend server running on http://localhost:${PORT}`);
 });

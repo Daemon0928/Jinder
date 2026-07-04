@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import db from '../db/database';
 import { extractJobLinksWithGemini } from '../matcher/gemini';
+import { assertSafePublicUrl } from '../lib/urlSafety';
 
 
 export interface ScrapedJob {
@@ -189,16 +190,21 @@ export async function findCareerPageUrl(companyName: string): Promise<string | n
   if (cleanCompanyName.includes('|')) {
     const parts = cleanCompanyName.split('|');
     cleanCompanyName = parts[0].trim();
-    const possibleUrl = parts[1].trim();
-    if (possibleUrl.startsWith('http://') || possibleUrl.startsWith('https://') || possibleUrl.startsWith('file://')) {
-      manualUrl = possibleUrl;
-    }
-  } else if (cleanCompanyName.startsWith('http://') || cleanCompanyName.startsWith('https://') || cleanCompanyName.startsWith('file://')) {
+    manualUrl = parts[1].trim();
+  } else if (/^[a-z][a-z0-9+.-]*:\/\//i.test(cleanCompanyName)) {
     manualUrl = cleanCompanyName;
     cleanCompanyName = getCompanyFromUrl(manualUrl);
   }
 
   if (manualUrl) {
+    // User-supplied URLs are navigated by a headless browser — reject
+    // non-http protocols and private/internal targets (SSRF).
+    try {
+      await assertSafePublicUrl(manualUrl);
+    } catch (err: any) {
+      console.warn(`[Manual URL] Rejected unsafe URL for "${cleanCompanyName}": ${err.message}`);
+      return null;
+    }
     console.log(`[Manual URL] Using manually provided URL for "${cleanCompanyName}": ${manualUrl}`);
     try {
       db.prepare("INSERT OR REPLACE INTO career_page_cache (company_name, career_url) VALUES (?, ?)")
