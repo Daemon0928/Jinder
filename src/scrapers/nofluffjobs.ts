@@ -5,6 +5,7 @@ import { ScrapedJob } from '../types';
 import { getRandomUserAgent, SEARCH_PAGE_DELAY_MS } from '../lib/constants';
 import { getLocation } from '../lib/locations';
 import { getSharedBrowser } from '../lib/browser';
+import { withRetry } from '../lib/retry';
 
 const NOFLUFF_BASE_URL = process.env.NOFLUFF_BASE_URL || 'https://nofluffjobs.com';
 
@@ -39,7 +40,7 @@ export async function scrapeNoFluffJobs(keyword: string, locations?: string[]): 
     }
 
     console.log(`Querying search API with payload:`, JSON.stringify(payload));
-    const response = await axios.post(
+    const response = await withRetry(() => axios.post(
       `${NOFLUFF_BASE_URL}/api/search/posting?salaryCurrency=HUF&salaryPeriod=month`,
       payload,
       {
@@ -50,7 +51,7 @@ export async function scrapeNoFluffJobs(keyword: string, locations?: string[]): 
         },
         timeout: 15000
       }
-    );
+    ));
 
     if (response.data && Array.isArray(response.data.postings)) {
       postings = response.data.postings;

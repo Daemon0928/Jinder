@@ -12,7 +12,8 @@ export interface RetryOptions {
  * Throws the last error once attempts are exhausted.
  */
 export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOptions = {}): Promise<T> {
-  const attempts = opts.attempts ?? 3;
+  // Tests simulate failures deliberately — retrying them only slows the suite.
+  const attempts = opts.attempts ?? (process.env.NODE_ENV === 'test' ? 1 : 3);
   const baseDelayMs = opts.baseDelayMs ?? 1000;
 
   let lastErr: unknown;

@@ -4,6 +4,7 @@ import { ScrapedJob } from '../types';
 import { getRandomUserAgent, MAX_SEARCH_PAGES, SEARCH_PAGE_DELAY_MS } from '../lib/constants';
 import { getLocation } from '../lib/locations';
 import { getSharedBrowser } from '../lib/browser';
+import { withRetry } from '../lib/retry';
 
 const PROFESSION_BASE_URL = process.env.PROFESSION_BASE_URL || 'https://www.profession.hu';
 
@@ -41,14 +42,14 @@ export async function scrapeProfessionHu(keyword: string, locations?: string[]):
     console.log(`Searching URL: ${searchUrl}`);
     let html = '';
     try {
-      // Try Axios first (much faster)
-      const response = await axios.get(searchUrl, {
+      // Try Axios first (much faster), with retry for transient failures
+      const response = await withRetry(() => axios.get(searchUrl, {
         headers: {
           'User-Agent': getRandomUserAgent(),
           'Accept-Language': 'hu-HU,hu;q=0.9,en-US;q=0.8,en;q=0.7'
         },
         timeout: 10000
-      });
+      }));
       html = response.data;
     } catch (error: any) {
       console.warn(`Axios scraping failed or was blocked for URL: ${searchUrl}. Falling back to Playwright...`, error.message);
