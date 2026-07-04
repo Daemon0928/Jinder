@@ -101,6 +101,36 @@ export class SchedulerService {
     }
   }
 
+  /**
+   * Atomically claim a manual scrape run. Returns false when a run is already
+   * active. This is the single guard for API-triggered runs — routes must not
+   * check isRunning themselves.
+   */
+  public tryStartManualScrape(): boolean {
+    if (this.isRunning) {
+      return false;
+    }
+    this.progress.isScraping = true;
+    this.progress.phase = 'searching';
+    this.runNow().catch((err: any) => {
+      console.error('Manual background scraping run failed:', err.message);
+    });
+    return true;
+  }
+
+  /** Atomically claim a reevaluation run; false when one is already active. */
+  public tryStartReevaluation(customBatchSize?: number): boolean {
+    if (this.isRunning) {
+      return false;
+    }
+    this.progress.isScraping = true;
+    this.progress.phase = 'reevaluating';
+    this.runReevaluation(customBatchSize).catch((err: any) => {
+      console.error('Manual background reevaluation run failed:', err.message);
+    });
+    return true;
+  }
+
   public getStatus(): SchedulerStatus {
     const enabled = this.isSchedulerEnabled();
     const intervalHours = this.getIntervalHours();
@@ -302,6 +332,39 @@ export class SchedulerService {
 
     this.isRunning = true;
 
+    // Log the reevaluation run so it shows up in scrape history like scrapes do
+    const startedAt = new Date().toISOString();
+    let historyId: number | bigint = 0;
+    try {
+      const info = db.prepare(`
+        INSERT INTO scrape_history (started_at, "trigger", status)
+        VALUES (?, 'reevaluation', 'running')
+      `).run(startedAt);
+      historyId = info.lastInsertRowid;
+    } catch (dbErr: any) {
+      console.error('Failed to log reevaluation start to database:', dbErr.message);
+    }
+
+    const finishHistory = (status: 'completed' | 'failed', errors: string[]) => {
+      if (!historyId) return;
+      try {
+        db.prepare(`
+          UPDATE scrape_history
+          SET finished_at = ?, total_scraped = ?, new_jobs = 0, matched = ?, errors = ?, status = ?
+          WHERE id = ?
+        `).run(
+          new Date().toISOString(),
+          this.progress.totalJobs,
+          this.progress.matched,
+          JSON.stringify(errors),
+          status,
+          historyId
+        );
+      } catch (dbErr: any) {
+        console.error('Failed to log reevaluation finish to database:', dbErr.message);
+      }
+    };
+
     // Initialize progress
     this.progress = {
       isScraping: true,
@@ -326,6 +389,7 @@ export class SchedulerService {
       if (allJobs.length === 0) {
         this.progress.isScraping = false;
         this.progress.phase = 'done';
+        finishHistory('completed', []);
         this.isRunning = false;
         return;
       }
@@ -399,10 +463,24 @@ export class SchedulerService {
           }
         }
 
-        // Save updated scores to database
+        // Save updated scores to database. The index comes back from the LLM,
+        // so validate it before using it — an out-of-range or duplicate index
+        // would attach scores to the wrong job.
+        const consumedIndexes = new Set<number>();
         for (const res of matchResults) {
+          if (
+            !res ||
+            !Number.isInteger(res.index) ||
+            res.index < 0 ||
+            res.index >= batch.length ||
+            consumedIndexes.has(res.index)
+          ) {
+            console.warn(`Skipping reevaluation result with invalid or duplicate index: ${res?.index}`);
+            this.progress.errors++;
+            continue;
+          }
+          consumedIndexes.add(res.index);
           const job = batch[res.index];
-          if (!job) continue;
 
           try {
             const finalTitle = res.parsedJob.title || job.title;
@@ -466,10 +544,12 @@ export class SchedulerService {
       this.progress.currentJobIndex = allJobs.length;
       this.progress.phase = 'done';
       this.progress.isScraping = false;
+      finishHistory('completed', []);
     } catch (err: any) {
       console.error('Reevaluation failed:', err.message);
       this.progress.phase = 'done';
       this.progress.isScraping = false;
+      finishHistory('failed', [`Fatal error: ${err.message}`]);
     } finally {
       this.isRunning = false;
     }

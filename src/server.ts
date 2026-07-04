@@ -205,9 +205,15 @@ app.post('/api/config', (req, res) => {
     const upsertStmt = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
     
     if (cv !== undefined) {
+      if (typeof cv !== 'string') {
+        return res.status(400).json({ error: 'CV must be a string' });
+      }
       upsertStmt.run('cv', cv);
     }
     if (keywords !== undefined) {
+      if (!Array.isArray(keywords) || keywords.some(k => typeof k !== 'string')) {
+        return res.status(400).json({ error: 'Keywords must be an array of strings' });
+      }
       upsertStmt.run('keywords', JSON.stringify(keywords));
     }
     if (excludeKeywords !== undefined) {
@@ -223,6 +229,9 @@ app.post('/api/config', (req, res) => {
       upsertStmt.run('discord_webhook', discordWebhook);
     }
     if (locations !== undefined) {
+      if (!Array.isArray(locations) || locations.some(l => typeof l !== 'string')) {
+        return res.status(400).json({ error: 'Locations must be an array of strings' });
+      }
       upsertStmt.run('locations', JSON.stringify(locations));
     }
     if (companies !== undefined) {
@@ -340,42 +349,21 @@ app.post('/api/config/cv-upload', upload.single('cv'), async (req, res) => {
   }
 });
 
-// Trigger a scraping run for all configured keywords (refactored to use schedulerService)
+// Trigger a scraping run for all configured keywords (guard lives in the scheduler)
 app.post('/api/scrape', (req, res) => {
-  if (schedulerService.getStatus().isRunning) {
+  if (!schedulerService.tryStartManualScrape()) {
     return res.status(429).json({ error: 'A scraping job is already running' });
   }
-
-  // Set progress state synchronously to prevent race conditions in test suite
-  schedulerService.progress.isScraping = true;
-  schedulerService.progress.phase = 'searching';
-
   res.json({ status: 'started', message: 'Scraping process initiated in background' });
-
-  // Run scraper in the background so API call returns immediately
-  schedulerService.runNow().catch((err: any) => {
-    console.error('Manual background scraping run failed:', err.message);
-  });
 });
 
 // Trigger a CV reevaluation run for all existing jobs in the database
 app.post('/api/scrape/reevaluate', (req, res) => {
-  if (schedulerService.getStatus().isRunning) {
+  const { batchSize } = req.body;
+  if (!schedulerService.tryStartReevaluation(batchSize ? Number(batchSize) : undefined)) {
     return res.status(429).json({ error: 'A scraping or reevaluation job is already running' });
   }
-
-  const { batchSize } = req.body;
-
-  // Set progress state synchronously to prevent race conditions in test suite
-  schedulerService.progress.isScraping = true;
-  schedulerService.progress.phase = 'reevaluating';
-
   res.json({ status: 'started', message: 'Reevaluation process initiated in background' });
-
-  // Run reevaluation in background
-  schedulerService.runReevaluation(batchSize ? Number(batchSize) : undefined).catch((err: any) => {
-    console.error('Manual background reevaluation run failed:', err.message);
-  });
 });
 
 // Get current scraping status with detailed progress (refactored to use schedulerService)
@@ -426,18 +414,9 @@ app.post('/api/scheduler/stop', (req, res) => {
 // Trigger immediate run
 app.post('/api/scheduler/run-now', (req, res) => {
   try {
-    if (schedulerService.getStatus().isRunning) {
+    if (!schedulerService.tryStartManualScrape()) {
       return res.status(429).json({ error: 'A scraping job is already running' });
     }
-
-    // Set progress state synchronously to prevent race conditions in test suite
-    schedulerService.progress.isScraping = true;
-    schedulerService.progress.phase = 'searching';
-
-    // Run in background
-    schedulerService.runNow().catch((err: any) => {
-      console.error('Manual background scraping run failed:', err.message);
-    });
     res.json({ status: 'started', message: 'Scraping process initiated in background' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -515,7 +494,47 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   warnIfAuthDisabled();
+  if (!process.env.GEMINI_API_KEY && process.env.MOCK_GEMINI !== 'true') {
+    console.warn(
+      '[gemini] GEMINI_API_KEY is not set — CV summarization and job matching will be skipped. ' +
+      'Set it in .env to enable matching.'
+    );
+  }
   console.log(`Backend server running on http://localhost:${PORT}`);
+});
+
+// --- Graceful shutdown & process-level error handling ---
+let shuttingDown = false;
+function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received — shutting down...`);
+  schedulerService.stop();
+  server.close(() => {
+    try {
+      db.close();
+    } catch (err: any) {
+      console.error('Error closing database:', err.message);
+    }
+    console.log('Shutdown complete.');
+    process.exit(0);
+  });
+  // In-flight scrapes (Playwright navigations, LLM calls) can take a while;
+  // don't hold the process hostage past a reasonable grace period.
+  setTimeout(() => {
+    console.warn('Forcing exit after shutdown grace period.');
+    process.exit(1);
+  }, 10_000).unref();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  shutdown('uncaughtException');
 });

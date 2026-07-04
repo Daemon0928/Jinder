@@ -3,7 +3,7 @@ import db from "../db/database";
 import axios from "axios";
 
 // Gemini model from .env
-let GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
+let GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
 export interface MatchResult {
   matchScore: number;

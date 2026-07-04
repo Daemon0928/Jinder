@@ -375,7 +375,6 @@ async function run() {
       for (const fail of failuresReport) {
         console.log(`- ${fail}`);
       }
-      console.log('\n(Note: Failing scraperManager integration tests are expected at this stage, but the runner executed successfully.)');
     }
 
     // Clean up test DB files

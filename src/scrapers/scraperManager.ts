@@ -277,7 +277,7 @@ export async function runScraper(
         currentJobTitle: batch.map((x) => x.job.title).join(", "),
       });
 
-      const batchInput = batch.map((item, idx) => ({
+      const batchInput = batch.map((item) => ({
         title: item.job.title,
         company: item.job.company,
         description: item.detailText,
@@ -326,10 +326,24 @@ export async function runScraper(
         }
       }
 
-      // Process match results and save to DB
+      // Process match results and save to DB. The index comes back from the
+      // LLM, so validate it before using it — an out-of-range or duplicate
+      // index would attach scores to the wrong job.
+      const consumedIndexes = new Set<number>();
       for (const res of matchResults) {
+        if (
+          !res ||
+          !Number.isInteger(res.index) ||
+          res.index < 0 ||
+          res.index >= batch.length ||
+          consumedIndexes.has(res.index)
+        ) {
+          console.warn(`Skipping match result with invalid or duplicate index: ${res?.index}`);
+          report.errors.push(`Invalid batch match index: ${res?.index}`);
+          continue;
+        }
+        consumedIndexes.add(res.index);
         const item = batch[res.index];
-        if (!item) continue;
 
         const job = item.job;
         const detailText = item.detailText;
@@ -337,25 +351,14 @@ export async function runScraper(
         try {
           report.matchedCount++;
 
-          let finalTitle = job.title;
-          let finalCompany = job.company;
-          let finalLocation = job.location;
-          let parsedJsonStr = "";
-          let score = -1;
-          let prosStr = "[]";
-          let consStr = "[]";
-          let justification = "";
-
-          if (res) {
-            finalTitle = res.parsedJob.title || job.title;
-            finalCompany = res.parsedJob.company || job.company;
-            finalLocation = res.parsedJob.location || job.location;
-            parsedJsonStr = JSON.stringify(res.parsedJob);
-            score = res.matchScore;
-            prosStr = JSON.stringify(res.pros);
-            consStr = JSON.stringify(res.cons);
-            justification = res.justification;
-          }
+          const finalTitle = res.parsedJob.title || job.title;
+          const finalCompany = res.parsedJob.company || job.company;
+          const finalLocation = res.parsedJob.location || job.location;
+          const parsedJsonStr = JSON.stringify(res.parsedJob);
+          const score = res.matchScore;
+          const prosStr = JSON.stringify(res.pros);
+          const consStr = JSON.stringify(res.cons);
+          const justification = res.justification;
 
           onProgress?.({ phase: "saving" });
 
