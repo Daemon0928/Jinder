@@ -92,4 +92,9 @@ export function initDatabase() {
   console.log('Database initialized successfully at:', DB_FILE);
 }
 
+// Initialize on first import so consumers (e.g. the scheduler singleton,
+// which reads config in its constructor) never see a missing schema.
+// Migrations are idempotent, so an explicit initDatabase() call is harmless.
+initDatabase();
+
 export default db;

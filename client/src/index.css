@@ -1588,3 +1588,261 @@ button, input, textarea, select {
     font-size: 16px !important;
   }
 }
+
+/* ============================================================
+   Additions: semantic buttons, toasts, dialogs, a11y, breakpoints
+   ============================================================ */
+
+/* .job-card and .location-card are real <button>s now — neutralize UA styles */
+button.job-card,
+button.location-card {
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  width: 100%;
+}
+
+/* Visible keyboard focus everywhere without spamming mouse users */
+:focus-visible {
+  outline: 2px solid var(--color-primary, #6366f1);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.spinner-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* --- Text helpers replacing inline styles --- */
+.card-description {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.settings-card > .card-description {
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+.details-description {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.save-status {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.save-status-success {
+  color: var(--color-success);
+}
+.save-status-error {
+  color: var(--color-danger);
+}
+
+.btn-danger-outline {
+  border-color: var(--color-danger-glow);
+  color: var(--color-danger);
+}
+
+.keyword-tags-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.reevaluate-section {
+  margin-top: 40px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 24px;
+}
+
+.settings-save-row {
+  border-top: 1px solid var(--border-color);
+  padding-top: 24px;
+}
+
+.location-group-heading {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+/* --- Scheduler box (was inline-styled) --- */
+.scheduler-section {
+  margin-bottom: 32px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 24px;
+}
+
+.scheduler-settings-box {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.scheduler-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.scheduler-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+}
+.scheduler-badge.enabled {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: var(--color-success);
+}
+.scheduler-badge.disabled {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: var(--color-danger);
+}
+
+.scheduler-info {
+  font-size: 13px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scheduler-summary-card {
+  margin-top: 12px;
+  padding: 12px;
+  background-color: rgba(255, 255, 255, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+}
+.scheduler-summary-title {
+  font-weight: bold;
+  margin-bottom: 6px;
+  color: var(--text-primary);
+}
+.scheduler-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 12px;
+}
+
+/* --- Toasts --- */
+.toast-stack {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--bg-panel, #1e1e2e);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: toast-in 0.2s ease-out;
+}
+
+@keyframes toast-in {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.toast-success { border-left: 3px solid var(--color-success); }
+.toast-error { border-left: 3px solid var(--color-danger); }
+.toast-info { border-left: 3px solid var(--color-primary, #6366f1); }
+
+.toast-icon { flex-shrink: 0; }
+
+.toast-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 4px;
+}
+.toast-close:hover { color: var(--text-primary); }
+
+/* --- Confirm dialog --- */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 16px;
+}
+
+.dialog {
+  background: var(--bg-panel, #1e1e2e);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.dialog h3 { margin-bottom: 8px; }
+.dialog p { color: var(--text-secondary); font-size: 14px; margin-bottom: 20px; }
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* --- Additional breakpoints (base design targets 768px only) --- */
+@media (max-width: 480px) {
+  .filters-panel {
+    grid-template-columns: 1fr;
+  }
+  .scheduler-summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .toast-stack {
+    bottom: 76px; /* clear the mobile bottom nav */
+  }
+}
+
+@media (min-width: 1200px) {
+  .jobs-layout {
+    grid-template-columns: minmax(340px, 420px) 1fr;
+  }
+}

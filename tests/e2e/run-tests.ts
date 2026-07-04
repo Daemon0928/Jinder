@@ -60,9 +60,42 @@ function seedJobsTable(jobs: any[]) {
   db.close();
 }
 
+/**
+ * Kill the spawned app server including grandchildren. `appProcess.kill()`
+ * only terminates the `npx` wrapper on Windows, orphaning the actual node
+ * server — which then keeps port 5000 and corrupts the NEXT suite run.
+ */
+function killAppServer(appProcess: ReturnType<typeof spawn>) {
+  if (process.platform === 'win32' && appProcess.pid) {
+    try {
+      require('child_process').execSync(`taskkill /pid ${appProcess.pid} /T /F`, { stdio: 'ignore' });
+      return;
+    } catch {
+      // fall through to plain kill
+    }
+  }
+  appProcess.kill();
+}
+
+/** True when something is already listening on the app port. */
+async function portInUse(port: number): Promise<boolean> {
+  try {
+    await axios.get(`http://localhost:${port}/api/config`, { timeout: 1500 });
+    return true;
+  } catch (err: any) {
+    return Boolean(err.response); // any HTTP response means a listener exists
+  }
+}
+
 async function run() {
   console.log('=== Starting Jinder E2E Test Suite ===');
-  
+
+  // 0. Refuse to run against a stale server — tests would silently hit old code
+  if (await portInUse(5000)) {
+    console.error('Port 5000 is already in use (a stale app server?). Kill it and re-run.');
+    process.exit(2);
+  }
+
   // 1. Start Mock Server
   console.log('Booting mock server on port 5001...');
   await startMockServer(5001);
@@ -387,14 +420,14 @@ async function run() {
 
     // Shutdown processes
     console.log('Shutting down spawned application server...');
-    appProcess.kill();
+    killAppServer(appProcess);
     await stopMockServer();
 
     process.exit(failedCount);
 
   } catch (err: any) {
     console.error('Fatal runner error:', err.message);
-    appProcess.kill();
+    killAppServer(appProcess);
     await stopMockServer();
     process.exit(1);
   }
