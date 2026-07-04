@@ -50,44 +50,85 @@ function maskSecret(value: string): string {
 
 // --- API Endpoints ---
 
-// Get all jobs with filtering options
+// Liveness/readiness probe (used by Docker HEALTHCHECK and monitoring)
+app.get('/healthz', (req, res) => {
+  let dbOk = false;
+  try {
+    db.prepare('SELECT 1').get();
+    dbOk = true;
+  } catch {
+    // fall through with dbOk = false
+  }
+  const status = schedulerService.getStatus();
+  res.status(dbOk ? 200 : 503).json({
+    status: dbOk ? 'ok' : 'degraded',
+    dbOk,
+    schedulerEnabled: status.enabled,
+    schedulerNextRun: status.nextRunAt,
+    uptimeSeconds: Math.round(process.uptime()),
+  });
+});
+
+// Get all jobs with filtering options.
+// Without page/limit the full array is returned (legacy shape);
+// with ?page=&limit= the response is { jobs, total, page, limit }.
 app.get('/api/jobs', (req, res) => {
   try {
-    const { status, minScore, platform } = req.query;
-    let query = 'SELECT * FROM jobs WHERE 1=1';
-    const params: any[] = [];
+    const { status, minScore, platform, q } = req.query;
+    let where = ' FROM jobs WHERE 1=1';
+    const params: (string | number)[] = [];
 
     if (status) {
-      query += ' AND status = ?';
-      params.push(status);
+      where += ' AND status = ?';
+      params.push(String(status));
     }
     if (minScore) {
-      query += ' AND match_score >= ?';
+      where += ' AND match_score >= ?';
       params.push(Number(minScore));
     }
     if (platform) {
-      query += ' AND platform = ?';
-      params.push(platform);
+      where += ' AND platform = ?';
+      params.push(String(platform));
+    }
+    if (q) {
+      where += ' AND (title LIKE ? OR company LIKE ?)';
+      const like = `%${String(q)}%`;
+      params.push(like, like);
     }
 
     // Sort by score (unmatched jobs -1 are sorted last)
-    query += ' ORDER BY match_score DESC, created_at DESC';
+    const orderBy = ' ORDER BY match_score DESC, created_at DESC';
 
-    const jobs = db.prepare(query).all(...params);
+    const paginated = req.query.page !== undefined || req.query.limit !== undefined;
+    let rows;
+    let total = 0;
+    if (paginated) {
+      const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+      const page = Math.max(Number(req.query.page) || 1, 1);
+      total = (db.prepare(`SELECT COUNT(*) AS c${where}`).get(...params) as { c: number }).c;
+      rows = db.prepare(`SELECT *${where}${orderBy} LIMIT ? OFFSET ?`)
+        .all(...params, limit, (page - 1) * limit);
 
-    // Parse the stringified JSON fields back into objects
-    const parsedJobs = jobs.map((job: any) => ({
-      ...job,
-      parsed_json: job.parsed_json ? JSON.parse(job.parsed_json) : null,
-      match_pros: job.match_pros ? JSON.parse(job.match_pros) : [],
-      match_cons: job.match_cons ? JSON.parse(job.match_cons) : []
-    }));
+      const parsedJobs = rows.map(parseJobRow);
+      return res.json({ jobs: parsedJobs, total, page, limit });
+    }
 
-    res.json(parsedJobs);
+    rows = db.prepare(`SELECT *${where}${orderBy}`).all(...params);
+    res.json(rows.map(parseJobRow));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Parse the stringified JSON fields back into objects
+function parseJobRow(job: any) {
+  return {
+    ...job,
+    parsed_json: job.parsed_json ? JSON.parse(job.parsed_json) : null,
+    match_pros: job.match_pros ? JSON.parse(job.match_pros) : [],
+    match_cons: job.match_cons ? JSON.parse(job.match_cons) : []
+  };
+}
 
 // Update a job's status (e.g. mark as applied, bookmarked, rejected)
 app.patch('/api/jobs/:id', (req, res) => {

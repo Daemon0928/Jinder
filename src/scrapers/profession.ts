@@ -1,66 +1,19 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { chromium } from 'playwright';
+import { ScrapedJob } from '../types';
+import { getRandomUserAgent, MAX_SEARCH_PAGES, SEARCH_PAGE_DELAY_MS } from '../lib/constants';
+import { getLocation } from '../lib/locations';
+import { getSharedBrowser } from '../lib/browser';
 
 const PROFESSION_BASE_URL = process.env.PROFESSION_BASE_URL || 'https://www.profession.hu';
 
-export interface ScrapedJob {
-  job_id: string;
-  platform: string;
-  title: string;
-  company: string;
-  location: string;
-  link: string;
-  rawText: string;
-}
-
-// User agents to prevent blocking
-const USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-];
-
-function getRandomUserAgent() {
-  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-}
-
-interface LocationInfo {
-  slug: string;
-  id: string;
-  homeOfficeId?: string;
-}
-
-const LOCATION_MAP: Record<string, LocationInfo> = {
-  "budapest": { slug: "budapest", id: "23" },
-  "pest": { slug: "pest", id: "37" },
-  "debrecen": { slug: "debrecen", id: "32" },
-  "szeged": { slug: "szeged", id: "29" },
-  "miskolc": { slug: "miskolc", id: "28" },
-  "pecs": { slug: "pecs", id: "26" },
-  "gyor": { slug: "gyor", id: "31" },
-  "nyiregyhaza": { slug: "nyiregyhaza", id: "39" },
-  "kecskemet": { slug: "kecskemet", id: "25" },
-  "szekesfehervar": { slug: "szekesfehervar", id: "30" },
-  "szombathely": { slug: "szombathely", id: "41" },
-  "szolnok": { slug: "jasz-nagykun-szolnok", id: "34" },
-  "tatabanya": { slug: "tatabanya", id: "35" },
-  "kaposvar": { slug: "kaposvar", id: "38" },
-  "bekescsaba": { slug: "bekescsaba", id: "27" },
-  "veszprem": { slug: "veszprem", id: "42" },
-  "zalaegerszeg": { slug: "zalaegerszeg", id: "43" },
-  "eger": { slug: "heves", id: "33" },
-  "salgotarjan": { slug: "salgotarjan", id: "36" },
-  "szekszard": { slug: "szekszard", id: "40" },
-  "tavmunka": { slug: "", id: "0", homeOfficeId: "6" },
-  "home_office": { slug: "", id: "0", homeOfficeId: "5" }
-};
+export type { ScrapedJob };
 
 export async function scrapeProfessionHu(keyword: string, locations?: string[]): Promise<ScrapedJob[]> {
   console.log(`Scraping Profession.hu for keyword: "${keyword}"...`);
   
-  // Format the search query URLs (pages 1 to 3)
-  const maxPages = 3;
+  // Format the search query URLs (pages 1 to MAX_SEARCH_PAGES)
+  const maxPages = MAX_SEARCH_PAGES;
   const searchUrls: string[] = [];
   if (!locations || locations.length === 0) {
     for (let page = 1; page <= maxPages; page++) {
@@ -68,14 +21,14 @@ export async function scrapeProfessionHu(keyword: string, locations?: string[]):
     }
   } else {
     for (const locKey of locations) {
-      const locInfo = LOCATION_MAP[locKey];
+      const locInfo = getLocation(locKey);
       if (!locInfo) continue;
-      
+
       for (let page = 1; page <= maxPages; page++) {
-        if (locInfo.homeOfficeId) {
-          searchUrls.push(`${PROFESSION_BASE_URL}/allasok/${page},0,0,${encodeURIComponent(keyword)},0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,${locInfo.homeOfficeId}`);
+        if (locInfo.professionHomeOfficeId) {
+          searchUrls.push(`${PROFESSION_BASE_URL}/allasok/${page},0,0,${encodeURIComponent(keyword)},0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,${locInfo.professionHomeOfficeId}`);
         } else {
-          searchUrls.push(`${PROFESSION_BASE_URL}/allasok/${locInfo.slug}/${page},0,${locInfo.id},${encodeURIComponent(keyword)}`);
+          searchUrls.push(`${PROFESSION_BASE_URL}/allasok/${locInfo.professionSlug}/${page},0,${locInfo.professionId},${encodeURIComponent(keyword)}`);
         }
       }
     }
@@ -99,11 +52,12 @@ export async function scrapeProfessionHu(keyword: string, locations?: string[]):
       html = response.data;
     } catch (error: any) {
       console.warn(`Axios scraping failed or was blocked for URL: ${searchUrl}. Falling back to Playwright...`, error.message);
-      
-      // Fallback to Playwright
-      const browser = await chromium.launch({ headless: true });
+
+      // Fallback to Playwright (shared browser, own page)
+      let page;
       try {
-        const page = await browser.newPage({
+        const browser = await getSharedBrowser();
+        page = await browser.newPage({
           userAgent: getRandomUserAgent(),
           extraHTTPHeaders: {
             'Accept-Language': 'hu-HU,hu;q=0.9,en-US;q=0.8,en;q=0.7'
@@ -115,7 +69,7 @@ export async function scrapeProfessionHu(keyword: string, locations?: string[]):
         console.error(`Playwright scraping search page failed for URL: ${searchUrl}:`, pwError.message);
         continue;
       } finally {
-        await browser.close();
+        await page?.close();
       }
     }
 
@@ -172,7 +126,7 @@ export async function scrapeProfessionHu(keyword: string, locations?: string[]):
 
     // Polite delay between URL scrapes
     if (searchUrls.length > 1) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, SEARCH_PAGE_DELAY_MS));
     }
   }
 
@@ -194,9 +148,10 @@ export async function scrapeJobDetails(url: string): Promise<string> {
     html = response.data;
   } catch (error: any) {
     console.warn(`Axios detail scraping failed for ${url}. Falling back to Playwright...`, error.message);
-    const browser = await chromium.launch({ headless: true });
+    let page;
     try {
-      const page = await browser.newPage({
+      const browser = await getSharedBrowser();
+      page = await browser.newPage({
         userAgent: getRandomUserAgent()
       });
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
@@ -205,7 +160,7 @@ export async function scrapeJobDetails(url: string): Promise<string> {
       console.error(`Playwright detail scraping failed for ${url}:`, pwError.message);
       return '';
     } finally {
-      await browser.close();
+      await page?.close();
     }
   }
 

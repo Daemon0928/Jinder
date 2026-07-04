@@ -8,31 +8,14 @@ import {
   scrapeJobDetails as scrapeNoFluffDetails,
 } from "./nofluffjobs";
 import { scrapeCareerPages, scrapeCareerPageDetails } from "./careerPages";
-import {
-  matchJobWithGemini,
-  matchJobsBatchWithGemini,
-} from "../matcher/gemini";
+import { closeSharedBrowser } from "../lib/browser";
+import { DETAIL_FETCH_DELAY_MS } from "../lib/constants";
+import { matchJobsInBatches } from "../matching/pipeline";
+import { sendDiscordAlert } from "../notify/discord";
+import config from "../config";
+import { ScrapeReport, ScrapeProgress, ProgressCallback } from "../types";
 
-export interface ScrapeReport {
-  scrapedCount: number;
-  newJobsCount: number;
-  matchedCount: number;
-  errors: string[];
-}
-
-export interface ScrapeProgress {
-  phase: "searching" | "fetching" | "matching" | "saving" | "done" | "reevaluating";
-  currentJobIndex: number;
-  totalJobs: number;
-  currentJobTitle: string;
-  currentKeyword: string;
-  keywordIndex: number;
-  totalKeywords: number;
-  newJobs: number;
-  matched: number;
-  skipped: number;
-  errors: number;
-}
+export type { ScrapeReport, ScrapeProgress, ProgressCallback };
 
 function matchesExcludeKeywords(
   title: string,
@@ -49,7 +32,6 @@ function matchesExcludeKeywords(
   });
 }
 
-export type ProgressCallback = (progress: Partial<ScrapeProgress>) => void;
 
 export async function runScraper(
   keyword: string,
@@ -247,7 +229,7 @@ export async function runScraper(
         newJobsToMatch.push({ job, detailText });
 
         // Add 1.5 seconds delay between scraping details to be polite
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await new Promise((resolve) => setTimeout(resolve, DETAIL_FETCH_DELAY_MS));
 
         onProgress?.({
           newJobs: report.newJobsCount,
@@ -263,173 +245,101 @@ export async function runScraper(
       }
     }
 
-    // 3. Batch matching with fallback
-    for (let b = 0; b < newJobsToMatch.length; b += BATCH_SIZE) {
-      const batch = newJobsToMatch.slice(b, b + BATCH_SIZE);
-      console.log(
-        `Matching batch of ${batch.length} jobs (progress: ${b}/${newJobsToMatch.length})...`,
-      );
-
-      onProgress?.({
-        phase: "matching",
-        currentJobIndex: b + 1,
-        totalJobs: newJobsToMatch.length,
-        currentJobTitle: batch.map((x) => x.job.title).join(", "),
-      });
-
-      const batchInput = batch.map((item) => ({
+    // 3. Batch matching with fallback (shared pipeline), saving as results arrive
+    await matchJobsInBatches(
+      newJobsToMatch,
+      (item) => ({
         title: item.job.title,
         company: item.job.company,
         description: item.detailText,
-      }));
-
-      let matchResults: any[] | null = null;
-      try {
-        matchResults = await matchJobsBatchWithGemini(batchInput);
-        if (!matchResults || matchResults.length !== batch.length) {
-          throw new Error(
-            "Batch matching failed or returned incomplete results",
+      }),
+      BATCH_SIZE,
+      {
+        onBatchStart: (offset, batch) => {
+          console.log(
+            `Matching batch of ${batch.length} jobs (progress: ${offset}/${newJobsToMatch.length})...`,
           );
-        }
-      } catch (batchErr: any) {
-        console.warn(
-          `Batch matching failed, falling back to individual matching:`,
-          batchErr.message,
-        );
-        report.errors.push(`Batch matching fallback: ${batchErr.message}`);
-
-        // Fallback to individual matching for this batch
-        matchResults = [];
-        for (let idx = 0; idx < batch.length; idx++) {
-          const item = batch[idx];
+          onProgress?.({
+            phase: "matching",
+            currentJobIndex: offset + 1,
+            totalJobs: newJobsToMatch.length,
+            currentJobTitle: batch.map((x) => x.job.title).join(", "),
+          });
+        },
+        onBatchError: (message) => {
+          console.warn(`Batch matching failed, falling back to individual matching:`, message);
+          report.errors.push(`Batch matching fallback: ${message}`);
+        },
+        onItemError: (item, message) => {
+          console.error(`Individual fallback matching failed for ${item.job.job_id}:`, message);
+          report.errors.push(
+            `Individual matching fallback error for ${item.job.job_id}: ${message}`,
+          );
+        },
+        onInvalidIndex: (index) => {
+          console.warn(`Skipping match result with invalid or duplicate index: ${index}`);
+          report.errors.push(`Invalid batch match index: ${index}`);
+        },
+        onResult: async (item, res) => {
+          const job = item.job;
           try {
-            const result = await matchJobWithGemini(
-              item.job.title,
-              item.job.company,
+            report.matchedCount++;
+
+            const finalTitle = res.parsedJob.title || job.title;
+            const finalCompany = res.parsedJob.company || job.company;
+            const finalLocation = res.parsedJob.location || job.location;
+            const score = res.matchScore;
+            const justification = res.justification;
+
+            onProgress?.({ phase: "saving" });
+
+            insertStmt.run(
+              job.job_id,
+              job.platform,
+              finalTitle,
+              finalCompany,
+              finalLocation,
+              job.link,
               item.detailText,
+              JSON.stringify(res.parsedJob),
+              score,
+              JSON.stringify(res.pros),
+              JSON.stringify(res.cons),
+              justification,
             );
-            if (result) {
-              matchResults.push({
-                ...result,
-                index: idx,
+
+            console.log(`Saved job "${finalTitle}" to database. Score: ${score}%`);
+
+            if (score >= config.MATCH_ALERT_THRESHOLD) {
+              await sendDiscordAlert({
+                title: finalTitle,
+                company: finalCompany,
+                location: finalLocation,
+                link: job.link,
+                score,
+                justification,
               });
             }
-          } catch (indivErr: any) {
-            console.error(
-              `Individual fallback matching failed for ${item.job.job_id}:`,
-              indivErr.message,
-            );
-            report.errors.push(
-              `Individual matching fallback error for ${item.job.job_id}: ${indivErr.message}`,
-            );
+
+            onProgress?.({
+              newJobs: report.newJobsCount,
+              matched: report.matchedCount,
+              errors: report.errors.length,
+            });
+          } catch (saveError: any) {
+            console.error(`Error saving job ${job.job_id}:`, saveError.message);
+            report.errors.push(`Save job ${job.job_id}: ${saveError.message}`);
+            onProgress?.({ errors: report.errors.length });
           }
-        }
-      }
-
-      // Process match results and save to DB. The index comes back from the
-      // LLM, so validate it before using it — an out-of-range or duplicate
-      // index would attach scores to the wrong job.
-      const consumedIndexes = new Set<number>();
-      for (const res of matchResults) {
-        if (
-          !res ||
-          !Number.isInteger(res.index) ||
-          res.index < 0 ||
-          res.index >= batch.length ||
-          consumedIndexes.has(res.index)
-        ) {
-          console.warn(`Skipping match result with invalid or duplicate index: ${res?.index}`);
-          report.errors.push(`Invalid batch match index: ${res?.index}`);
-          continue;
-        }
-        consumedIndexes.add(res.index);
-        const item = batch[res.index];
-
-        const job = item.job;
-        const detailText = item.detailText;
-
-        try {
-          report.matchedCount++;
-
-          const finalTitle = res.parsedJob.title || job.title;
-          const finalCompany = res.parsedJob.company || job.company;
-          const finalLocation = res.parsedJob.location || job.location;
-          const parsedJsonStr = JSON.stringify(res.parsedJob);
-          const score = res.matchScore;
-          const prosStr = JSON.stringify(res.pros);
-          const consStr = JSON.stringify(res.cons);
-          const justification = res.justification;
-
-          onProgress?.({ phase: "saving" });
-
-          insertStmt.run(
-            job.job_id,
-            job.platform,
-            finalTitle,
-            finalCompany,
-            finalLocation,
-            job.link,
-            detailText,
-            parsedJsonStr,
-            score,
-            prosStr,
-            consStr,
-            justification,
-          );
-
-          console.log(
-            `Saved job "${finalTitle}" to database. Score: ${score}%`,
-          );
-
-          if (score >= 80) {
-            try {
-              const webhookRow = db
-                .prepare(
-                  "SELECT value FROM config WHERE key = 'discord_webhook'",
-                )
-                .get() as { value: string } | undefined;
-              const webhookUrl = webhookRow?.value;
-              if (webhookUrl && webhookUrl.startsWith("http")) {
-                const payload = {
-                  content: `🎉 **New Highly Matched Job: ${score}%**\n**Title:** ${finalTitle}\n**Company:** ${finalCompany}\n**Location:** ${finalLocation}\n[View Job Details](${job.link})`,
-                  embeds: [
-                    {
-                      title: "AI Match Justification",
-                      description: justification.substring(0, 2048),
-                      color: 3447003,
-                    },
-                  ],
-                };
-                await fetch(webhookUrl, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(payload),
-                });
-                console.log(`Sent Discord webhook for job: ${finalTitle}`);
-              }
-            } catch (webhookErr: any) {
-              console.error(
-                "Failed to send Discord webhook:",
-                webhookErr.message,
-              );
-            }
-          }
-
-          onProgress?.({
-            newJobs: report.newJobsCount,
-            matched: report.matchedCount,
-            errors: report.errors.length,
-          });
-        } catch (saveError: any) {
-          console.error(`Error saving job ${job.job_id}:`, saveError.message);
-          report.errors.push(`Save job ${job.job_id}: ${saveError.message}`);
-          onProgress?.({ errors: report.errors.length });
-        }
-      }
-    }
+        },
+      },
+    );
   } catch (error: any) {
     console.error("Scraper manager run failed:", error.message);
     report.errors.push(`Global scraper error: ${error.message}`);
+  } finally {
+    // All scrapers share one Chromium instance per run; close it here.
+    await closeSharedBrowser();
   }
 
   onProgress?.({ phase: "done" });

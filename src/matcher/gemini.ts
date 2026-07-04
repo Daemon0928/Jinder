@@ -1,31 +1,46 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import db from "../db/database";
 import axios from "axios";
+import { MatchResult, BatchMatchInput, BatchMatchResult } from "../types";
+
+export type { MatchResult, BatchMatchInput, BatchMatchResult };
 
 // Gemini model from .env
-let GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
-export interface MatchResult {
-  matchScore: number;
-  pros: string[];
-  cons: string[];
-  justification: string;
-  parsedJob: {
-    title: string;
-    company: string;
-    location: string;
-    description: string;
-    techStack: string[];
-    salary: string;
-  };
+// One client for the process — construction is cheap but there's no reason
+// to repeat it per call.
+let aiClient: GoogleGenAI | null = null;
+function getClient(): GoogleGenAI | null {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  if (!aiClient) {
+    aiClient = new GoogleGenAI({ apiKey });
+  }
+  return aiClient;
 }
 
 // Retrieve the CV from the configuration table
-function getCVText(): string {
+export function getCVText(): string {
   const row = db.prepare("SELECT value FROM config WHERE key = ?").get("cv") as
     | { value: string }
     | undefined;
   return row ? row.value : "";
+}
+
+/**
+ * In MOCK_GEMINI mode the e2e mock server can override responses via
+ * dynamic "mock rules". Returns the rules object, or null when unavailable.
+ */
+async function fetchMockRules(caller: string): Promise<any | null> {
+  try {
+    const mockServerUrl = process.env.PROFESSION_BASE_URL || 'http://localhost:5001';
+    const res = await axios.get(`${mockServerUrl}/api/test/mock-rules`, { timeout: 2000 });
+    return res.data ?? null;
+  } catch (err: any) {
+    console.warn(`Failed to query dynamic mock rules for ${caller}:`, err.message);
+    return null;
+  }
 }
 
 /**
@@ -35,18 +50,12 @@ function getCVText(): string {
  */
 export async function summarizeCv(rawText: string): Promise<string | null> {
   if (process.env.MOCK_GEMINI === 'true') {
-    try {
-      const mockServerUrl = process.env.PROFESSION_BASE_URL || 'http://localhost:5001';
-      const res = await axios.get(`${mockServerUrl}/api/test/mock-rules`, { timeout: 2000 });
-      const rules = res.data;
-      if (rules && rules.geminiSummarizeStatus !== undefined) {
-        if (rules.geminiSummarizeStatus !== 200) {
-          throw new Error(`Mock Gemini summarize failed with status ${rules.geminiSummarizeStatus}`);
-        }
+    const rules = await fetchMockRules('summarizeCv');
+    if (rules && rules.geminiSummarizeStatus !== undefined) {
+      if (rules.geminiSummarizeStatus === 200) {
         return rules.geminiSummarizePayload || null;
       }
-    } catch (err: any) {
-      console.warn('Failed to query dynamic mock rules for summarizeCv:', err.message);
+      console.warn(`Mock Gemini summarize failed with status ${rules.geminiSummarizeStatus}`);
     }
 
     return `## Professional Summary
@@ -61,13 +70,11 @@ Deterministic mock CV summary.
 - Bachelor of Computer Science`;
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  const ai = getClient();
+  if (!ai) {
     console.warn("GEMINI_API_KEY is not set. Skipping CV summarization.");
     return null;
   }
-
-  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
 You are a career assistant. The user has uploaded their CV. The raw text was extracted from a PDF and may contain formatting artefacts, extra whitespace, or mixed languages (Hungarian/English).
@@ -117,22 +124,16 @@ export async function matchJobWithGemini(
   jobTitle: string,
   jobCompany: string,
   rawHtmlOrText: string,
+  cvTextOverride?: string,
 ): Promise<MatchResult | null> {
   if (process.env.MOCK_GEMINI === 'true') {
-    try {
-      const mockServerUrl = process.env.PROFESSION_BASE_URL || 'http://localhost:5001';
-      const res = await axios.get(`${mockServerUrl}/api/test/mock-rules`, { timeout: 2000 });
-      const rules = res.data;
-      if (rules) {
-        if (rules.geminiStatus !== undefined && rules.geminiStatus !== 200) {
-          throw new Error(`Mock Gemini match failed with status ${rules.geminiStatus}`);
-        }
-        if (rules.geminiPayload) {
-          return rules.geminiPayload;
-        }
+    const rules = await fetchMockRules('matchJobWithGemini');
+    if (rules) {
+      if (rules.geminiStatus !== undefined && rules.geminiStatus !== 200) {
+        console.warn(`Mock Gemini match failed with status ${rules.geminiStatus}`);
+      } else if (rules.geminiPayload) {
+        return rules.geminiPayload;
       }
-    } catch (err: any) {
-      console.warn('Failed to query dynamic mock rules for matchJobWithGemini:', err.message);
     }
 
     let score = 45;
@@ -162,22 +163,20 @@ export async function matchJobWithGemini(
     };
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  const ai = getClient();
+  if (!ai) {
     console.warn("GEMINI_API_KEY is not set. Skipping semantic match.");
     return null;
   }
 
-  const cvText = getCVText();
+  const cvText = cvTextOverride ?? getCVText();
   if (!cvText) {
     console.warn("CV text is not set in config. Skipping matching logic.");
     return null;
   }
 
-  const ai = new GoogleGenAI({ apiKey });
-
   const prompt = `
-You are a career assistant helping a software developer find jobs in Hungary. 
+You are a career assistant helping a software developer find jobs in Hungary.
 Your task is to analyze the provided job posting text (which might be in Hungarian, English, or a mix of both) and compare it against the user's CV.
 
 Here is the user's CV:
@@ -285,42 +284,26 @@ Perform the following tasks:
   }
 }
 
-export interface BatchMatchInput {
-  title: string;
-  company: string;
-  description: string;
-}
-
-export interface BatchMatchResult extends MatchResult {
-  index: number;
-}
-
 /**
  * Match a batch of jobs with Gemini in a single API call to optimize tokens and API costs.
  */
 export async function matchJobsBatchWithGemini(
-  jobs: BatchMatchInput[]
+  jobs: BatchMatchInput[],
+  cvTextOverride?: string,
 ): Promise<BatchMatchResult[] | null> {
   if (jobs.length === 0) return [];
 
   if (process.env.MOCK_GEMINI === 'true') {
-    try {
-      const mockServerUrl = process.env.PROFESSION_BASE_URL || 'http://localhost:5001';
-      const res = await axios.get(`${mockServerUrl}/api/test/mock-rules`, { timeout: 2000 });
-      const rules = res.data;
-      if (rules) {
-        if (rules.geminiStatus !== undefined && rules.geminiStatus !== 200) {
-          throw new Error(`Mock Gemini match failed with status ${rules.geminiStatus}`);
-        }
-        if (rules.geminiPayload) {
-          return jobs.map((_, idx) => ({
-            ...rules.geminiPayload,
-            index: idx
-          }));
-        }
+    const rules = await fetchMockRules('matchJobsBatchWithGemini');
+    if (rules) {
+      if (rules.geminiStatus !== undefined && rules.geminiStatus !== 200) {
+        console.warn(`Mock Gemini batch match failed with status ${rules.geminiStatus}`);
+      } else if (rules.geminiPayload) {
+        return jobs.map((_, idx) => ({
+          ...rules.geminiPayload,
+          index: idx
+        }));
       }
-    } catch (err: any) {
-      console.warn('Failed to query dynamic mock rules for matchJobsBatchWithGemini:', err.message);
     }
 
     return jobs.map((job, idx) => {
@@ -352,19 +335,17 @@ export async function matchJobsBatchWithGemini(
     });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  const ai = getClient();
+  if (!ai) {
     console.warn("GEMINI_API_KEY is not set. Skipping batch semantic match.");
     return null;
   }
 
-  const cvText = getCVText();
+  const cvText = cvTextOverride ?? getCVText();
   if (!cvText) {
     console.warn("CV text is not set in config. Skipping matching logic.");
     return null;
   }
-
-  const ai = new GoogleGenAI({ apiKey });
 
   const jobsFormatted = jobs.map((job, idx) => `
 Job Index: ${idx}
@@ -523,13 +504,11 @@ export async function extractJobLinksWithGemini(
       .map(l => l.href);
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  const ai = getClient();
+  if (!ai) {
     console.warn("GEMINI_API_KEY is not set. Skipping LLM link extraction.");
     return null;
   }
-
-  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
 You are a web scraping assistant. Your task is to analyze a list of candidate links extracted from a company's career page and identify which of them point to individual job posting detail pages (i.e. specific job vacancies like "Senior Software Engineer", "DevOps Intern", etc.).

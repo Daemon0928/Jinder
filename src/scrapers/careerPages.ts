@@ -1,29 +1,11 @@
-import { chromium } from 'playwright';
 import db from '../db/database';
 import { extractJobLinksWithGemini } from '../matcher/gemini';
 import { assertSafePublicUrl } from '../lib/urlSafety';
+import { ScrapedJob } from '../types';
+import { getRandomUserAgent, MAX_SEARCH_PAGES, SEARCH_ENGINE_DELAY_MS } from '../lib/constants';
+import { getSharedBrowser } from '../lib/browser';
 
-
-export interface ScrapedJob {
-  job_id: string;
-  platform: string;
-  title: string;
-  company: string;
-  location: string;
-  link: string;
-  rawText: string;
-}
-
-// User agents to prevent blocking
-const USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-];
-
-function getRandomUserAgent(): string {
-  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-}
+export type { ScrapedJob };
 
 function isSearchEngineDomain(urlStr: string): boolean {
   try {
@@ -231,15 +213,13 @@ export async function findCareerPageUrl(companyName: string): Promise<string | n
   // 2. Perform search
   console.log(`[Search] Discovering career URL for "${cleanCompanyName}"...`);
   
-  // Rate limiting delay (2.5 seconds) before query to avoid blocking
-  await new Promise(resolve => setTimeout(resolve, 2500));
+  // Rate limiting delay before query to avoid blocking
+  await new Promise(resolve => setTimeout(resolve, SEARCH_ENGINE_DELAY_MS));
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--disable-http2']
-  });
+  const browser = await getSharedBrowser();
+  let page;
   try {
-    const page = await browser.newPage({
+    page = await browser.newPage({
       userAgent: getRandomUserAgent(),
       extraHTTPHeaders: {
         'Accept-Language': 'hu-HU,hu;q=0.9,en-US;q=0.8,en;q=0.7'
@@ -388,7 +368,7 @@ export async function findCareerPageUrl(companyName: string): Promise<string | n
     console.error(`[Search] Discovery process failed for "${cleanCompanyName}":`, err.message);
     return null;
   } finally {
-    await browser.close();
+    await page?.close();
   }
 }
 
@@ -459,15 +439,13 @@ export async function scrapeCareerPage(
   console.log(`[Scrape] Loading career page: ${careerUrl} for keyword "${keyword}"...`);
   const resolvedCompany = companyName || getCompanyFromUrl(careerUrl);
   
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--disable-http2']
-  });
+  const browser = await getSharedBrowser();
   const jobs: ScrapedJob[] = [];
   const visitedLinks = new Set<string>();
 
+  let page: import('playwright').Page | undefined;
   try {
-    const page = await browser.newPage({
+    page = await browser.newPage({
       userAgent: getRandomUserAgent(),
       extraHTTPHeaders: {
         'Accept-Language': 'hu-HU,hu;q=0.9,en-US;q=0.8,en;q=0.7'
@@ -481,7 +459,6 @@ export async function scrapeCareerPage(
       const status = response.status();
       if (status === 401 || status === 403) {
         console.warn(`[Scrape] Career page for ${resolvedCompany} is behind a login wall (HTTP ${status}). Skipping.`);
-        await browser.close();
         return [];
       }
     }
@@ -503,7 +480,6 @@ export async function scrapeCareerPage(
 
     if (isLoginRedirect || hasPasswordInput) {
       console.warn(`[Scrape] Career page for ${resolvedCompany} is behind a login wall (${page.url()}). Skipping.`);
-      await browser.close();
       return [];
     }
 
@@ -511,7 +487,7 @@ export async function scrapeCareerPage(
     const discoveredLinks: { href: string; title: string }[] = [];
 
     let currentPage = 1;
-    const maxPages = 3;
+    const maxPages = MAX_SEARCH_PAGES;
     let newJobsFoundInLastIteration = true;
 
     while (currentPage <= maxPages && newJobsFoundInLastIteration) {
@@ -634,7 +610,7 @@ export async function scrapeCareerPage(
                 if (title && url) {
                   let fullUrl = '';
                   try {
-                    fullUrl = new URL(url, page.url()).href;
+                    fullUrl = new URL(url, page!.url()).href;
                   } catch (e) {
                     return;
                   }
@@ -723,7 +699,7 @@ export async function scrapeCareerPage(
   } catch (err: any) {
     console.error(`[Scrape] Failed to scrape career page ${careerUrl}:`, err.message);
   } finally {
-    await browser.close();
+    await page?.close();
   }
 
   return jobs;
@@ -734,12 +710,10 @@ export async function scrapeCareerPage(
  */
 export async function scrapeCareerPageDetails(url: string): Promise<string> {
   console.log(`[Details] Scraping career detail page: ${url}`);
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--disable-http2']
-  });
+  const browser = await getSharedBrowser();
+  let page;
   try {
-    const page = await browser.newPage({
+    page = await browser.newPage({
       userAgent: getRandomUserAgent()
     });
     await page.goto(url, { waitUntil: 'commit', timeout: 30000 });
@@ -753,7 +727,7 @@ export async function scrapeCareerPageDetails(url: string): Promise<string> {
     console.error(`[Details] Failed to scrape career details for ${url}:`, err.message);
     return '';
   } finally {
-    await browser.close();
+    await page?.close();
   }
 }
 

@@ -1,6 +1,9 @@
 import db from './db/database';
-import { runScraper, ScrapeReport, ScrapeProgress } from './scrapers/scraperManager';
-import { matchJobsBatchWithGemini, matchJobWithGemini } from './matcher/gemini';
+import { runScraper } from './scrapers/scraperManager';
+import { ScrapeReport, ScrapeProgress } from './types';
+import { matchJobsInBatches } from './matching/pipeline';
+import { sendDiscordAlert } from './notify/discord';
+import config from './config';
 
 export interface SchedulerStatus {
   enabled: boolean;
@@ -421,125 +424,68 @@ export class SchedulerService {
         WHERE id = ?
       `);
 
-      // Match in batches
-      for (let b = 0; b < allJobs.length; b += BATCH_SIZE) {
-        const batch = allJobs.slice(b, b + BATCH_SIZE);
-        
-        this.progress.currentJobIndex = b;
-        this.progress.currentJobTitle = batch.map(j => j.title).join(', ');
-
-        const batchInput = batch.map(j => ({
-          title: j.title,
-          company: j.company,
-          description: j.description,
-        }));
-
-        let matchResults: any[] | null = null;
-        try {
-          matchResults = await matchJobsBatchWithGemini(batchInput);
-          if (!matchResults || matchResults.length !== batch.length) {
-            throw new Error('Batch matching failed or returned incomplete results');
-          }
-        } catch (batchErr: any) {
-          console.warn(`Reevaluation batch matching failed, falling back to individual:`, batchErr.message);
-          this.progress.errors++;
-
-          // Fallback to individual
-          matchResults = [];
-          for (let idx = 0; idx < batch.length; idx++) {
-            const item = batch[idx];
+      // Match in batches through the shared pipeline, updating rows as results arrive
+      await matchJobsInBatches(
+        allJobs,
+        (j) => ({ title: j.title, company: j.company, description: j.description }),
+        BATCH_SIZE,
+        {
+          onBatchStart: (offset, batch) => {
+            this.progress.currentJobIndex = offset;
+            this.progress.currentJobTitle = batch.map(j => j.title).join(', ');
+          },
+          onBatchError: (message) => {
+            console.warn(`Reevaluation batch matching failed, falling back to individual:`, message);
+            this.progress.errors++;
+          },
+          onItemError: (item, message) => {
+            console.error(`Reevaluation individual fallback matching failed for job ${item.id}:`, message);
+            this.progress.errors++;
+          },
+          onInvalidIndex: (index) => {
+            console.warn(`Skipping reevaluation result with invalid or duplicate index: ${index}`);
+            this.progress.errors++;
+          },
+          onResult: async (job, res) => {
             try {
-              const result = await matchJobWithGemini(item.title, item.company, item.description);
-              if (result) {
-                matchResults.push({
-                  ...result,
-                  index: idx,
+              const finalTitle = res.parsedJob.title || job.title;
+              const finalCompany = res.parsedJob.company || job.company;
+              const finalLocation = res.parsedJob.location || job.location;
+              const score = res.matchScore;
+              const justification = res.justification;
+
+              updateStmt.run(
+                finalTitle,
+                finalCompany,
+                finalLocation,
+                JSON.stringify(res.parsedJob),
+                score,
+                JSON.stringify(res.pros),
+                JSON.stringify(res.cons),
+                justification,
+                job.id
+              );
+
+              this.progress.matched++;
+
+              if (score >= config.MATCH_ALERT_THRESHOLD) {
+                await sendDiscordAlert({
+                  title: finalTitle,
+                  company: finalCompany,
+                  location: finalLocation,
+                  link: job.link,
+                  score,
+                  justification,
+                  reevaluated: true,
                 });
               }
-            } catch (indivErr: any) {
-              console.error(`Reevaluation individual fallback matching failed for job ${item.id}:`, indivErr.message);
+            } catch (saveError: any) {
+              console.error(`Error saving reevaluated job ${job.id}:`, saveError.message);
               this.progress.errors++;
             }
-          }
-        }
-
-        // Save updated scores to database. The index comes back from the LLM,
-        // so validate it before using it — an out-of-range or duplicate index
-        // would attach scores to the wrong job.
-        const consumedIndexes = new Set<number>();
-        for (const res of matchResults) {
-          if (
-            !res ||
-            !Number.isInteger(res.index) ||
-            res.index < 0 ||
-            res.index >= batch.length ||
-            consumedIndexes.has(res.index)
-          ) {
-            console.warn(`Skipping reevaluation result with invalid or duplicate index: ${res?.index}`);
-            this.progress.errors++;
-            continue;
-          }
-          consumedIndexes.add(res.index);
-          const job = batch[res.index];
-
-          try {
-            const finalTitle = res.parsedJob.title || job.title;
-            const finalCompany = res.parsedJob.company || job.company;
-            const finalLocation = res.parsedJob.location || job.location;
-            const parsedJsonStr = JSON.stringify(res.parsedJob);
-            const score = res.matchScore;
-            const prosStr = JSON.stringify(res.pros);
-            const consStr = JSON.stringify(res.cons);
-            const justification = res.justification;
-
-            updateStmt.run(
-              finalTitle,
-              finalCompany,
-              finalLocation,
-              parsedJsonStr,
-              score,
-              prosStr,
-              consStr,
-              justification,
-              job.id
-            );
-
-            this.progress.matched++;
-
-            // Trigger discord webhook if score >= 80%
-            if (score >= 80) {
-              try {
-                const webhookRow = db
-                  .prepare("SELECT value FROM config WHERE key = 'discord_webhook'")
-                  .get() as { value: string } | undefined;
-                const webhookUrl = webhookRow?.value;
-                if (webhookUrl && webhookUrl.startsWith('http')) {
-                  const payload = {
-                    content: `🎉 **Reevaluated Highly Matched Job: ${score}%**\n**Title:** ${finalTitle}\n**Company:** ${finalCompany}\n**Location:** ${finalLocation}\n[View Job Details](${job.link})`,
-                    embeds: [
-                      {
-                        title: "AI Match Justification (Reevaluated)",
-                        description: justification.substring(0, 2048),
-                        color: 3447003,
-                      },
-                    ],
-                  };
-                  await fetch(webhookUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                  });
-                }
-              } catch (webhookErr: any) {
-                console.error('Failed to send Discord webhook for reevaluation:', webhookErr.message);
-              }
-            }
-          } catch (saveError: any) {
-            console.error(`Error saving reevaluated job ${job.id}:`, saveError.message);
-            this.progress.errors++;
-          }
-        }
-      }
+          },
+        },
+      );
 
       this.progress.currentJobIndex = allJobs.length;
       this.progress.phase = 'done';

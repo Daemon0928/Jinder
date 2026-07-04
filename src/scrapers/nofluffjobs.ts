@@ -1,78 +1,14 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { chromium } from 'playwright';
 
-export interface ScrapedJob {
-  job_id: string;
-  platform: string;
-  title: string;
-  company: string;
-  location: string;
-  link: string;
-  rawText: string;
-}
+import { ScrapedJob } from '../types';
+import { getRandomUserAgent, SEARCH_PAGE_DELAY_MS } from '../lib/constants';
+import { getLocation } from '../lib/locations';
+import { getSharedBrowser } from '../lib/browser';
 
 const NOFLUFF_BASE_URL = process.env.NOFLUFF_BASE_URL || 'https://nofluffjobs.com';
 
-const USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-];
-
-function getRandomUserAgent() {
-  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-}
-
-const LOCATION_MAP: Record<string, string> = {
-  'budapest': 'Budapest',
-  'pest': 'Pest',
-  'debrecen': 'Debrecen',
-  'szeged': 'Szeged',
-  'miskolc': 'Miskolc',
-  'pecs': 'Pécs',
-  'gyor': 'Győr',
-  'nyiregyhaza': 'Nyíregyháza',
-  'kecskemet': 'Kecskemét',
-  'szekesfehervar': 'Székesfehérvár',
-  'szombathely': 'Szombathely',
-  'szolnok': 'Szolnok',
-  'tatabanya': 'Tatabánya',
-  'kaposvar': 'Kaposvár',
-  'bekescsaba': 'Békéscsaba',
-  'veszprem': 'Veszprém',
-  'zalaegerszeg': 'Zalaegerszeg',
-  'eger': 'Eger',
-  'salgotarjan': 'Salgótarján',
-  'szekszard': 'Szekszárd',
-  'tavmunka': 'remote',
-  'home_office': 'remote'
-};
-
-const FALLBACK_CITY_MAP: Record<string, string> = {
-  'budapest': 'budapest',
-  'pest': 'pest',
-  'debrecen': 'debrecen',
-  'szeged': 'szeged',
-  'miskolc': 'miskolc',
-  'pecs': 'pecs',
-  'gyor': 'gyor',
-  'nyiregyhaza': 'nyiregyhaza',
-  'kecskemet': 'kecskemet',
-  'szekesfehervar': 'szekesfehervar',
-  'szombathely': 'szombathely',
-  'szolnok': 'szolnok',
-  'tatabanya': 'tatabanya',
-  'kaposvar': 'kaposvar',
-  'bekescsaba': 'bekescsaba',
-  'veszprem': 'veszprem',
-  'zalaegerszeg': 'zalaegerszeg',
-  'eger': 'eger',
-  'salgotarjan': 'salgotarjan',
-  'szekszard': 'szekszard',
-  'tavmunka': 'remote',
-  'home_office': 'remote'
-};
+export type { ScrapedJob };
 
 /**
  * Scrapes job listings from No Fluff Jobs.
@@ -84,7 +20,7 @@ export async function scrapeNoFluffJobs(keyword: string, locations?: string[]): 
   // 1. Map locations to API city names
   const mappedLocations = Array.from(new Set(
     (locations || [])
-      .map(loc => LOCATION_MAP[loc.toLowerCase()])
+      .map(loc => getLocation(loc)?.nofluffCity)
       .filter((loc): loc is string => !!loc)
   ));
 
@@ -157,7 +93,7 @@ export async function scrapeNoFluffJobs(keyword: string, locations?: string[]): 
   
   const fallbackCities = Array.from(new Set(
     (locations || [])
-      .map(loc => FALLBACK_CITY_MAP[loc.toLowerCase()])
+      .map(loc => getLocation(loc)?.nofluffSlug)
       .filter((loc): loc is string => !!loc)
   ));
 
@@ -172,14 +108,14 @@ export async function scrapeNoFluffJobs(keyword: string, locations?: string[]): 
 
   const jobs: ScrapedJob[] = [];
   const visitedLinks = new Set<string>();
-  const browser = await chromium.launch({ headless: true });
+  const browser = await getSharedBrowser();
 
-  try {
-    for (const searchUrl of searchUrls) {
+  for (const searchUrl of searchUrls) {
       console.log(`Playwright navigating to: ${searchUrl}`);
       let html = '';
+      let page;
       try {
-        const page = await browser.newPage({
+        page = await browser.newPage({
           userAgent: getRandomUserAgent(),
           extraHTTPHeaders: {
             'Accept-Language': 'hu-HU,hu;q=0.9,en-US;q=0.8,en;q=0.7'
@@ -190,6 +126,8 @@ export async function scrapeNoFluffJobs(keyword: string, locations?: string[]): 
       } catch (pwError: any) {
         console.error(`Playwright search page load failed for ${searchUrl}: ${pwError.message}`);
         continue;
+      } finally {
+        await page?.close();
       }
 
       const $ = cheerio.load(html);
@@ -236,11 +174,8 @@ export async function scrapeNoFluffJobs(keyword: string, locations?: string[]): 
       });
 
       if (searchUrls.length > 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, SEARCH_PAGE_DELAY_MS));
       }
-    }
-  } finally {
-    await browser.close();
   }
 
   return jobs;
@@ -327,9 +262,10 @@ export async function scrapeJobDetails(link: string): Promise<string> {
       html = response.data;
     } catch (error: any) {
       console.warn(`Axios detail page fetch failed for ${jobUrl}. Falling back to Playwright...`, error.message);
-      const browser = await chromium.launch({ headless: true });
+      let page;
       try {
-        const page = await browser.newPage({
+        const browser = await getSharedBrowser();
+        page = await browser.newPage({
           userAgent: getRandomUserAgent()
         });
         await page.goto(jobUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
@@ -338,7 +274,7 @@ export async function scrapeJobDetails(link: string): Promise<string> {
         console.error(`Playwright detail fallback failed for ${jobUrl}:`, pwError.message);
         return '';
       } finally {
-        await browser.close();
+        await page?.close();
       }
     }
 
