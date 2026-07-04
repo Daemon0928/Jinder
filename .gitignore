@@ -30,6 +30,9 @@ client/dist/
 .DS_Store
 Thumbs.db
 
+# Developer scratch area (never commit)
+tests/scratch/
+
 # Obsidian Vault (Junctioned Folder)
 vault/
 
