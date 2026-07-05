@@ -96,6 +96,22 @@ export interface SchedulerStatus {
   lastRunSummary: SchedulerSummary | null;
 }
 
+export interface AnalyticsData {
+  totals: { jobs: number; scored: number; highMatches: number; avgScore: number | null };
+  scoreHistogram: Array<{ bucket: string; count: number }>;
+  platforms: Array<{ platform: string; count: number; avgScore: number | null }>;
+  statusCounts: Array<{ status: string; count: number }>;
+  topCompanies: Array<{ company: string; count: number; avgScore: number | null }>;
+  runs: Array<{
+    startedAt: string;
+    trigger: string;
+    totalScraped: number;
+    newJobs: number;
+    matched: number;
+    status: string;
+  }>;
+}
+
 export interface CvUploadResult {
   success: boolean;
   filename: string;

@@ -9,6 +9,7 @@ import { requireAuth, warnIfAuthDisabled } from './middleware/auth';
 import jobsRouter from './routes/jobs';
 import configRouter from './routes/config';
 import scrapeRouter from './routes/scrape';
+import analyticsRouter from './routes/analytics';
 
 const app = express();
 const PORT = config.PORT;
@@ -44,6 +45,7 @@ app.get('/healthz', (req, res) => {
 // --- API routes ---
 app.use('/api/jobs', jobsRouter);
 app.use('/api/config', configRouter);
+app.use('/api/analytics', analyticsRouter);
 app.use('/api', scrapeRouter); // /api/scrape*, /api/scheduler/*, /api/scrape-history
 
 // --- Serve Frontend Static Files in Production ---

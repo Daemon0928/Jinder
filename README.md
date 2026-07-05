@@ -14,14 +14,16 @@ Job boards make you search; Jinder makes the jobs come to you — pre-scored, tr
 
 - **Multi-source scraping** — Profession.hu (Cheerio), No Fluff Jobs (API + Playwright fallback), and arbitrary **company career pages** discovered via search engines and parsed with Gemini link extraction.
 - **CV-aware AI matching** — upload a PDF (or paste text); Gemini summarizes it, then batch-evaluates every new posting against it: match score, pros, cons, justification, tech stack, salary — with seniority gaps hard-capping the score.
+- **Cross-platform dedup** — the same vacancy found on multiple boards shares one AI evaluation (fewer Gemini calls) and is badged "also on …" in the UI.
+- **Analytics dashboard** — score distribution, per-platform quality, scrape-run history, and top companies.
 - **Discord alerts** — matches ≥ 80% trigger a webhook notification with the score and reasoning.
 - **Background scheduler** — periodic scraping runs with live progress, run history, and CV re-evaluation after you update your profile.
 - **Application tracking** — bookmark, mark applied, or reject; filter by status, score, and free text.
 - **Self-hosted & private** — single container, SQLite storage, optional bearer-token auth. Your CV never leaves your machine except to the Gemini API.
 
-| Jobs list | Settings |
+| Jobs list | Analytics |
 | --- | --- |
-| ![Jobs list](docs/screenshots/jobs-list.png) | ![Settings](docs/screenshots/settings.png) |
+| ![Jobs list](docs/screenshots/jobs-list.png) | ![Analytics](docs/screenshots/analytics.png) |
 
 ## Quickstart (Docker)
 
@@ -128,6 +130,11 @@ The e2e suite boots a mock HTTP server that simulates Profession.hu, No Fluff Jo
 - Scrapers depend on the current HTML/API structure of Profession.hu and No Fluff Jobs; selector drift can reduce results until updated.
 - Match quality is bounded by the LLM: scores are a triage signal, not a verdict.
 - Single-user by design (one CV, one config).
+
+## Roadmap
+
+- Application-tracking kanban (`new → interested → applied → interview → offer/rejected`) with per-job notes.
+- Weekly email digest of top new matches (generalizing the Discord notifier into a channel interface).
 
 ## Project Structure
 

@@ -5,6 +5,7 @@ import type {
   SchedulerStatus,
   CvUploadResult,
   JobStatus,
+  AnalyticsData,
 } from './types';
 
 /** Error carrying the server-provided message when one exists. */
@@ -92,6 +93,10 @@ export const api = {
 
   startReevaluation(batchSize: number) {
     return postJson<{ status: string }>('/api/scrape/reevaluate', { batchSize });
+  },
+
+  getAnalytics(): Promise<AnalyticsData> {
+    return request<AnalyticsData>('/api/analytics');
   },
 
   getSchedulerStatus(): Promise<SchedulerStatus> {
