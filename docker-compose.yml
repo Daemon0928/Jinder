@@ -9,22 +9,30 @@ services:
       - "5000:5000"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.1-flash-lite}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash-lite}
+      - AUTH_TOKEN=${AUTH_TOKEN:-}
       - PORT=5000
       - DB_FILE=/app/data/jobs.db
     volumes:
       - jinder-data:/app/data
     restart: unless-stopped
+    # Graceful shutdown (SIGTERM handler) needs a moment to close the scrape run
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5000/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
 
-  # E2E Test Runner Service
+  # E2E Test Runner Service (uses the build stage — needs dev deps and tests/)
   tests:
     build:
       context: .
       dockerfile: Dockerfile
+      target: build
     container_name: jinder-tests
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.1-flash-lite}
       - NODE_ENV=test
       - DB_FILE=jobs.test.db
       - MOCK_GEMINI=true

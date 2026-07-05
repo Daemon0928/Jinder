@@ -13,7 +13,8 @@
     "test": "vitest run tests/unit",
     "test:watch": "vitest tests/unit",
     "test:e2e": "tsx tests/e2e/run-tests.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "keywords": [
     "job-scraper",

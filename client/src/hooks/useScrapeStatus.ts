@@ -28,7 +28,7 @@ export function useScrapeStatus(onTick?: () => void) {
   useEffect(() => {
     if (!isScraping) return;
     const interval = setInterval(() => {
-      check();
+      void check();
       onTick?.();
     }, 2000);
     return () => clearInterval(interval);

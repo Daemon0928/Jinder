@@ -38,7 +38,7 @@ function AppShell() {
     filters.minScore,
   );
   const { config, update: updateConfig, save: saveConfig, refresh: refreshConfig } = useConfig();
-  const { progress, setProgress, isScraping } = useScrapeStatus(refreshJobs);
+  const { progress, setProgress, isScraping } = useScrapeStatus(() => void refreshJobs());
   const { status: schedulerStatus, refresh: refreshScheduler } = useScheduler(
     activeTab === 'settings',
   );
@@ -78,7 +78,7 @@ function AppShell() {
     async (id: number, status: Job['status']) => {
       try {
         await api.updateJobStatus(id, status);
-        refreshJobs();
+        void refreshJobs();
       } catch (err) {
         showToast(err instanceof ApiError ? err.message : 'Failed to update job status', 'error');
       }
@@ -91,7 +91,7 @@ function AppShell() {
     try {
       await api.deleteJob(pendingDeleteId);
       setSelectedJob(null);
-      refreshJobs();
+      void refreshJobs();
       showToast('Job deleted.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Failed to delete job', 'error');

@@ -9,6 +9,10 @@ jobs.test.db-shm
 jobs.test.db-wal
 .env
 .git
+.github/
 .agents/
 .gemini/
+tests/scratch/
+docs/
 *.log
+*.md

@@ -204,6 +204,19 @@ async function run() {
             responseData = res.data;
             break;
           }
+          case 'http_request': {
+            // Generic request action for endpoint-level cases (healthz, pagination, auth...)
+            const { method = 'get', path: reqPath, body, headers } = tc.execute.params;
+            const res = await axios.request({
+              method,
+              url: `http://localhost:5000${reqPath}`,
+              data: body,
+              headers,
+            });
+            responseStatus = res.status;
+            responseData = res.data;
+            break;
+          }
           case 'api_config_post': {
             const res = await axios.post('http://localhost:5000/api/config', tc.execute.params);
             responseStatus = res.status;

@@ -45,7 +45,8 @@ export interface E2ETestCase {
       | 'api_cv_upload'
       | 'api_scrape_trigger'
       | 'api_scrape_status'
-      | 'direct_profession_scrape';
+      | 'direct_profession_scrape'
+      | 'http_request';
     params?: any;
   };
   assertions: {
@@ -1093,6 +1094,93 @@ testCases.push({
         { job_id: 'profession-mock-1', match_score: 78 }
       ]
     }
+  }
+});
+
+// --- Tier 5: endpoint hardening (healthz, pagination, validation) ---
+
+testCases.push({
+  id: 'E2E-T5-01',
+  name: 'GET /healthz reports ok with db connectivity',
+  tier: 4,
+  description: 'Liveness probe returns status ok and dbOk true.',
+  configSetup: {},
+  mockServerBehavior: {},
+  execute: {
+    action: 'http_request',
+    params: { method: 'get', path: '/healthz' }
+  },
+  assertions: {
+    status: 200,
+    responseBodyContains: ['ok', 'dbOk']
+  }
+});
+
+testCases.push({
+  id: 'E2E-T5-02',
+  name: 'GET /api/jobs with pagination params returns paginated shape',
+  tier: 4,
+  description: 'When ?page/?limit are passed the response is { jobs, total, page, limit }.',
+  configSetup: {},
+  mockServerBehavior: {},
+  execute: {
+    action: 'http_request',
+    params: { method: 'get', path: '/api/jobs?page=1&limit=10' }
+  },
+  assertions: {
+    status: 200,
+    responseBodyEquals: { jobs: [], total: 0, page: 1, limit: 10 }
+  }
+});
+
+testCases.push({
+  id: 'E2E-T5-03',
+  name: 'GET /api/jobs without pagination keeps the legacy array shape',
+  tier: 4,
+  description: 'Backward compatibility: no page/limit params returns a plain array.',
+  configSetup: {},
+  mockServerBehavior: {},
+  execute: {
+    action: 'http_request',
+    params: { method: 'get', path: '/api/jobs' }
+  },
+  assertions: {
+    status: 200,
+    responseBodyEquals: []
+  }
+});
+
+testCases.push({
+  id: 'E2E-T5-04',
+  name: 'POST /api/config rejects non-array keywords',
+  tier: 4,
+  description: 'Type validation guards the config store against corrupt values.',
+  configSetup: {},
+  mockServerBehavior: {},
+  execute: {
+    action: 'http_request',
+    params: { method: 'post', path: '/api/config', body: { keywords: 'not-an-array' } }
+  },
+  assertions: {
+    status: 400,
+    responseBodyContains: ['Keywords must be an array']
+  }
+});
+
+testCases.push({
+  id: 'E2E-T5-05',
+  name: 'POST /api/config rejects a malformed Discord webhook URL',
+  tier: 4,
+  description: 'Webhook value must be a parseable http(s) URL.',
+  configSetup: {},
+  mockServerBehavior: {},
+  execute: {
+    action: 'http_request',
+    params: { method: 'post', path: '/api/config', body: { discordWebhook: 'not-a-valid-url' } }
+  },
+  assertions: {
+    status: 400,
+    responseBodyContains: ['Discord webhook']
   }
 });
 

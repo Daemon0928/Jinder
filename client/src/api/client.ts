@@ -35,7 +35,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     const message =
       body && typeof body === 'object' && 'error' in body
-        ? String((body as { error: unknown }).error)
+        ? String(body.error)
         : `Request failed (HTTP ${res.status})`;
     throw new ApiError(res.status, message);
   }

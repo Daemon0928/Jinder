@@ -96,7 +96,7 @@ export default function CvTab({
           className="visually-hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
-            if (file) handlePdfUpload(file);
+            if (file) void handlePdfUpload(file);
             e.target.value = '';
           }}
         />
@@ -117,7 +117,7 @@ export default function CvTab({
             e.preventDefault();
             setIsDragging(false);
             const file = e.dataTransfer.files[0];
-            if (file) handlePdfUpload(file);
+            if (file) void handlePdfUpload(file);
           }}
           onClick={openFilePicker}
           onKeyDown={(e) => {
