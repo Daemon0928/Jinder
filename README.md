@@ -1,388 +1,141 @@
-# Jinder (Job Finder) 🚀
+# Jinder 🚀
 
-Jinder is a self-hosted, AI-powered job scraping, semantic matching, and alerting application designed to automate the process of finding software development and tech roles in Hungary. 
+[![CI](https://github.com/Daemon0928/Jinder/actions/workflows/ci.yml/badge.svg)](https://github.com/Daemon0928/Jinder/actions/workflows/ci.yml)
 
-By comparing your CV against scraped job descriptions using Gemini LLM, Jinder ranks opportunities by relevance, highlights pros and cons, and notifies you immediately on Discord when a highly compatible role is discovered.
+**Jinder** (Job Finder) is a self-hosted, AI-powered job hunting assistant for the Hungarian tech market. It scrapes job boards and company career pages, semantically matches every posting against **your CV** using Gemini, scores them 0–100%, and pings you on Discord the moment a strong match appears.
 
----
+![Job matches dashboard](docs/screenshots/job-details.png)
 
-## Table of Contents
-1. [Key Features](#key-features)
-2. [Architecture & Technology Stack](#architecture--technology-stack)
-3. [Project Directory Structure](#project-directory-structure)
-4. [Environment Configuration](#environment-configuration)
-5. [Local Installation & Run Guide](#local-installation--run-guide)
-   - [Prerequisites](#prerequisites)
-   - [Development Setup](#development-setup)
-   - [Production Build & Running](#production-build--running)
-6. [Docker Deployment](#docker-deployment)
-7. [User Guide (Workflow)](#user-guide-workflow)
-8. [Database Schema Details](#database-schema-details)
-9. [Scraper Pipeline Details](#scraper-pipeline-details)
-10. [Background Scheduler & History](#background-scheduler--history)
-11. [Testing & Verification](#testing--verification)
+## Why
 
----
+Job boards make you search; Jinder makes the jobs come to you — pre-scored, translated to English, with an honest AI breakdown of *why you fit and where you fall short* for each posting.
 
 ## Key Features
 
-- **Multi-Channel Scrapers**:
-  - **Profession.hu**: Scrapes listings using fast Cheerio parsing with multi-page support.
-  - **No Fluff Jobs**: Leverages the official API search endpoint with a headless Playwright browser fallback if blocked.
-  - **Company Career Pages**: Discovers career pages via automated Google/Bing/DuckDuckGo search queries, crawls them using Playwright, extracts candidates, and utilizes Gemini to target specific vacancy URLs.
-- **Automated CV Processing**:
-  - Upload a PDF CV or paste raw text.
-  - Parses PDF files using `pdf-parse` (with a plain-text fallback in test environments).
-  - Summarizes CVs using Gemini into structured English sections (Professional Summary, Skills, Experience, Education, Languages).
-- **Gemini Semantic Matching**:
-  - Analyzes Hungarian/English postings, translates details to English, and matches them against the CV.
-  - Computes a match score (0-100%), extracts 2-4 pros and cons, and generates a clear justification.
-  - **Experience Weighting**: Prioritizes experience alignment. Match score is capped at 75% max if there is a significant experience/seniority gap (e.g., job requires 5+ years, user has 3 years).
-  - **Batch Matching**: Matches jobs in groups (configurable batch size, default 10) in a single Gemini API call to significantly reduce token usage and API costs (with a robust individual fallback).
-  - **CV Reevaluation**: Trigger matching reevaluation for all existing scraped jobs in the database using a custom batch size.
-- **Exclude Keywords Filtering**:
-  - Prevent undesired jobs from being matched or saved by specifying exclude keywords (checked against titles before fetching details, and against description text post-fetch).
-- **Discord Alerting Webhook**:
-  - Instantly broadcasts formatted alerts (including matching scores, links, and justifications) to a Discord channel if a job score is $\ge 80\%$.
-- **Automated Background Scheduler**:
-  - Runs scraping runs periodically based on keywords and locations.
-  - Configurable execution interval (in hours) with toggle settings.
-  - Monitors detailed run results (new jobs, matched count, errors) through a dedicated `scrape_history` view.
-- **Responsive Web Dashboard**:
-  - React (v19) + Vite frontend to track applications.
-  - Drag-and-drop PDF uploader, scheduler configuration form, target company manager, keyword/location/exclude-keyword filters, batch size fields, manual CV matcher trigger, and detailed job dialogs.
-  - Categorize jobs into `new`, `bookmarked`, `applied`, and `rejected` states.
+- **Multi-source scraping** — Profession.hu (Cheerio), No Fluff Jobs (API + Playwright fallback), and arbitrary **company career pages** discovered via search engines and parsed with Gemini link extraction.
+- **CV-aware AI matching** — upload a PDF (or paste text); Gemini summarizes it, then batch-evaluates every new posting against it: match score, pros, cons, justification, tech stack, salary — with seniority gaps hard-capping the score.
+- **Discord alerts** — matches ≥ 80% trigger a webhook notification with the score and reasoning.
+- **Background scheduler** — periodic scraping runs with live progress, run history, and CV re-evaluation after you update your profile.
+- **Application tracking** — bookmark, mark applied, or reject; filter by status, score, and free text.
+- **Self-hosted & private** — single container, SQLite storage, optional bearer-token auth. Your CV never leaves your machine except to the Gemini API.
 
+| Jobs list | Settings |
+| --- | --- |
+| ![Jobs list](docs/screenshots/jobs-list.png) | ![Settings](docs/screenshots/settings.png) |
 
----
+## Quickstart (Docker)
 
-## Architecture & Technology Stack
+```bash
+cp .env.example .env          # add your GEMINI_API_KEY
+docker compose up --build jinder
+# open http://localhost:5000
+```
+
+### Try it without an API key
+
+```bash
+npm install && npm run seed:demo && npm run dev
+# open http://localhost:5000 — dashboard populated with demo matches
+```
+
+## Local Development
+
+Prerequisites: Node.js 20/22, npm 10+.
+
+```bash
+npm install
+npm install --prefix client
+npx playwright install chromium   # for the scraping fallbacks
+
+npm run dev            # backend on :5000 (hot reload)
+npm run frontend:dev   # Vite dev server on :5173 (proxies /api)
+```
+
+Production build: `npm run build && npm start` — the Express server serves both the API and the compiled frontend on port 5000.
+
+## Configuration
+
+Copy `.env.example` to `.env`:
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | for matching | Google Gemini API key. Without it the app runs but skips AI matching. |
+| `GEMINI_MODEL` | no | Model id (default `gemini-2.5-flash-lite`). |
+| `PORT` | no | Backend port (default `5000`). |
+| `AUTH_TOKEN` | no | When set, every `/api` request must send `Authorization: Bearer <token>`. |
+| `CORS_ORIGIN` | no | Allowed origin for cross-origin API calls (default Vite dev origin). |
+| `DB_FILE` | no | SQLite file path (default `./jobs.db`). |
+
+Everything else — keywords, locations, exclude keywords, target companies, Discord webhook, batch size, scheduler interval — is configured in the web UI and stored in SQLite.
+
+## Architecture
 
 ```mermaid
 flowchart TD
-    subgraph Frontend [React Frontend - Vite]
-        UI[Dashboard / App UI]
-        CVU[CV Uploader]
-        SC[Scheduler Config]
+    subgraph Frontend [React 19 + Vite]
+        UI[Dashboard]
     end
 
-    subgraph Backend [Express API Server - Node.js + TS]
-        API[Express Routes]
-        SM[Scraper Manager]
-        Sched[Scheduler Service]
-        GM[Gemini Matcher]
+    subgraph Backend [Express + TypeScript]
+        API[REST routes]
+        Sched[Scheduler]
+        SM[Scraper manager]
+        Pipe[Matching pipeline]
+        GM[Gemini matcher]
+        Notify[Discord notifier]
     end
 
-    subgraph External [External Services & Targets]
+    subgraph External
         Prof[Profession.hu]
         NFJ[No Fluff Jobs]
-        ATS[Company Career Sites]
-        GemAPI[Gemini API]
-        Disc[Discord Webhook]
+        ATS[Career pages]
+        Gem[Gemini API]
+        Disc[Discord]
     end
 
-    subgraph Storage [Local Database]
-        DB[(jobs.db SQLite)]
-    end
+    DB[(SQLite)]
 
-    UI <-->|JSON / Multi-part API| API
-    Sched -->|Triggers| SM
-    API -->|Triggers manually| SM
-    SM -->|Cheerio Scrape| Prof
-    SM -->|API / Playwright Scrape| NFJ
-    SM -->|Search & Playwright Scrape| ATS
-    SM -->|Batch Match / Extract Links| GM
-    GM <-->|GenerateContent| GemAPI
-    SM -->|Alerts >= 80%| Disc
-    API <-->|Read/Write| DB
-    SM -->|Save Jobs & History| DB
+    UI <--> API
+    API --> Sched --> SM
+    SM --> Prof & NFJ & ATS
+    SM --> Pipe --> GM <--> Gem
+    Pipe --> Notify --> Disc
+    API & SM & Pipe <--> DB
 ```
 
-### Stack Breakdown
-- **Runtime**: Node.js (v22 / LTS recommended)
-- **Language**: TypeScript (v6)
-- **Backend Framework**: Express (v5)
-- **Database**: SQLite via `better-sqlite3` (with Write-Ahead Logging `WAL` mode enabled for performance)
-- **Scraping Frameworks**: Playwright (for dynamic HTML pages) & Cheerio (for static parsing)
-- **AI SDK**: `@google/genai` (utilizing `gemini-3.1-flash-lite` or specified models)
-- **Frontend Framework**: React (v19) + Vite
-- **Media Parsing**: `pdf-parse` (for PDF text extraction)
+A scrape run: search all sources in parallel (one shared Chromium instance) → dedupe against the DB → politely fetch details sequentially → batch-match against the CV via Gemini (with per-job fallback and LLM-output validation) → save + alert. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full walkthrough and design decisions.
 
----
-
-## Project Directory Structure
-
-```
-Jinder/
-├── client/                     # Frontend Vite + React application
-│   ├── src/
-│   │   ├── App.tsx             # Main dashboard UI component (54KB rich application)
-│   │   ├── index.css           # Styling styles and layout rules
-│   │   └── main.tsx            # React entry point
-│   ├── index.html
-│   ├── vite.config.ts          # Vite config (proxies /api to port 5000)
-│   └── package.json
-├── src/                        # Backend Express + TS application
-│   ├── db/
-│   │   └── database.ts         # SQLite DB instantiation, WAL mode, schema initialization
-│   ├── matcher/
-│   │   └── gemini.ts           # Gemini API wrappers (CV summarize, job matching, batch matching)
-│   ├── scrapers/
-│   │   ├── profession.ts       # Profession.hu parsing logic
-│   │   ├── nofluffjobs.ts      # No Fluff Jobs scraper (API + Playwright fallback)
-│   │   ├── careerPages.ts      # Search engine discovery and dynamic career site crawler
-│   │   └── scraperManager.ts   # Entrypoint orchestrator merging results & scheduling matches
-│   ├── scheduler.ts            # Periodic cron-like job queue and status metrics tracker
-│   └── server.ts               # Express app routes (CV upload, scraper run, configurations)
-├── tests/                      # Testing workspace
-│   ├── e2e/                    # Complete E2E mock verification engine
-│   │   ├── test-cases.ts       # Detailed mock test case parameters (63 tests)
-│   │   ├── mock-server.ts      # Offline servers simulating Gemini & job platforms
-│   │   ├── database-helper.ts  # Database isolation wrappers
-│   │   └── run-tests.ts        # Main test execution file
-│   └── scratch/                # Manual verification scratch scripts and mock HTML pages
-├── Dockerfile                  # Application build container configuration
-├── docker-compose.yml          # Composition services (app on port 5000, tests service)
-├── jobs.db                     # SQLite database file (local only, git-ignored)
-├── tsconfig.json               # TypeScript configuration
-├── package.json                # Root server package and script configuration
-└── README.md                   # User documentation (this file)
-```
-
----
-
-## Environment Configuration
-
-A `.env` file must be created in the root directory. Copy `.env.example` as a starting point:
+## Testing
 
 ```bash
-cp .env.example .env
+npm test          # 36 unit tests (vitest): SSRF guard, matching pipeline, retry, locations
+npm run test:e2e  # 71 end-to-end cases against the real server with mocked portals + Gemini
+npm run typecheck
 ```
 
-### Variables Description:
-- **`GEMINI_API_KEY`**: Your Google Gemini API Key. (Required for CV summarization, career page link extraction, and job matching).
-- **`GEMINI_MODEL`**: The model identifier. Recommended default: `gemini-3.1-flash-lite` (supports cost-effective matching).
-- **`PORT`**: The backend server port (defaults to `5000`).
+The e2e suite boots a mock HTTP server that simulates Profession.hu, No Fluff Jobs, search engines, and Discord webhooks, then drives the actual Express app over HTTP and asserts on responses, SQLite state, and captured webhooks. CI runs all of it plus lint, both builds, and a Docker image build on every push.
 
----
+## Security Notes
 
-## Local Installation & Run Guide
+- Optional bearer-token auth (`AUTH_TOKEN`) protects all API routes.
+- The Discord webhook is write-only: the API never echoes the stored URL back.
+- User-supplied career-page URLs are validated against SSRF (no `file://`, no private/loopback/link-local targets, DNS-resolved).
+- Runs as a non-root user in Docker with a `/healthz` healthcheck.
 
-### Prerequisites
-- **Node.js**: Version 20 or 22 (LTS) is highly recommended.
-- **npm**: Version 10+.
-- **SQLite**: Local runtime libraries.
+## Limitations
 
-### Development Setup
-1. **Clone the repository**:
-   ```bash
-   git clone <repo-url> Jinder
-   cd Jinder
-   ```
-2. **Install all dependencies**:
-   Install root dependencies, then install frontend dependencies:
-   ```bash
-   npm install
-   npm install --prefix client
-   ```
-3. **Install Playwright Browsers**:
-   Ensure Playwright has the required browser binaries:
-   ```bash
-   npx playwright install chromium
-   ```
-4. **Run in Development Mode**:
-   Launch the backend server (on port `5000` with hot-reload via `tsx`) and frontend client (on port `5173` via Vite):
-   - **Terminal 1 (Backend)**:
-     ```bash
-     npm run dev
-     ```
-   - **Terminal 2 (Frontend)**:
-     ```bash
-     npm run frontend:dev
-     ```
-   Now, open your browser and navigate to `http://localhost:5173`.
+- **No LinkedIn scraper** — LinkedIn's ToS prohibits scraping and its anti-bot measures make it impractical to do politely; deliberately out of scope.
+- Scrapers depend on the current HTML/API structure of Profession.hu and No Fluff Jobs; selector drift can reduce results until updated.
+- Match quality is bounded by the LLM: scores are a triage signal, not a verdict.
+- Single-user by design (one CV, one config).
 
-### Production Build & Running
-To compile the TypeScript code and bundle the frontend assets for production:
-1. **Compile Backend and Frontend**:
-   ```bash
-   npm run build
-   npm run frontend:build
-   ```
-   *This compiles TypeScript files to `dist/` and builds the React app into `dist/frontend/`.*
-2. **Run Server**:
-   ```bash
-   npm run start
-   ```
-   The backend server will run on `http://localhost:5000`, serving both the REST APIs and the compiled static frontend files.
+## Project Structure
 
----
-
-## Docker Deployment
-
-Jinder can be fully run inside a Linux container using Docker. This avoids needing local node, python, or chrome binary setups.
-
-### Build & Start the Application
-To build the image and spin up the container:
-```bash
-docker compose up --build jinder
 ```
-The application will start, mapping port `5000` to the host. You can access the dashboard at `http://localhost:5000`. Database data is persisted in a Docker volume named `jinder-data`.
-
-### Run the E2E Test Suite
-To execute the comprehensive offline mock tests inside the container environment:
-```bash
-docker compose run --rm tests
+src/                 Express backend (routes/, scrapers/, matching/, matcher/, notify/, lib/, db/)
+client/src/          React frontend (api/, hooks/, components/, context/)
+tests/unit/          Vitest unit tests
+tests/e2e/           Mocked end-to-end suite (mock server + runner + 71 cases)
+scripts/seed-demo.ts Demo data seeder
+docs/                Architecture notes, screenshots, devlog
 ```
-*This builds the test image, runs the E2E test scripts, and shuts down immediately.*
-
----
-
-## User Guide (Workflow)
-
-When launching the Jinder dashboard for the first time, follow this setup checklist:
-
-### 1. Upload or Paste Your CV
-- Go to the **CV & Profile** tab.
-- Drag and drop your CV PDF file into the uploader, or paste it as plain text.
-- Jinder will extract the text, send it to Gemini, and present a structured English summary containing your core competencies, technologies, and roles.
-
-### 2. Configure Keywords & Locations
-- Define the search keywords (e.g. `Developer`, `Typescript`, `Architect`, `szoftverfejlesztő`) in the settings section.
-- Input location filters (e.g. `budapest`, `debrecen`, `remote`) to narrow down scrapers.
-
-### 3. Add Target Companies (Optional)
-- Under the **Company Careers** section, add specific companies you want to track (e.g. `Prezi`, `Shapr3D`, `Lufthansa Systems`).
-- The scrapers will search for and check their internal job boards.
-
-### 4. Enable Discord Notifications (Optional)
-- Create a webhook in your Discord server channel settings.
-- Copy the webhook URL and paste it into Jinder's configuration panel.
-- Save settings. Any matched position scoring $\ge 80\%$ will now trigger an alert in your channel.
-
-### 5. Trigger Scraping & Schedule
-- Click **Scrape Now** to run a manual scraper sweep. The backend will display active status indicators representing searching, fetching details, semantic matching, and database storage phases.
-- Configure the background **Scheduler Service** to run automatically (e.g. every `4` or `12` hours).
-
-### 6. Manage Matched Positions
-- Review findings in the **Jobs** grid.
-- Sort by matching percentage. Click any card to read:
-  - Translated English title, company, and location details.
-  - Job description.
-  - **Pros** (reasons why you fit).
-  - **Cons** (missing technologies or experience gaps).
-  - **Justification** (LLM analysis summarizing the fit).
-- Mark jobs as **Bookmarked**, **Applied**, or **Rejected** to keep track of your applications.
-
----
-
-## Database Schema Details
-
-Jinder utilizes an SQLite file named `jobs.db` in the project root. The schema contains four primary tables:
-
-### 1. `jobs`
-Stores details of all scraped and matched vacancies.
-- `id` (INTEGER, Primary Key, Auto-increment)
-- `job_id` (TEXT, Unique, e.g. `profession-12345` or `nofluffjobs-slug`)
-- `platform` (TEXT, e.g. `profession`, `nofluffjobs`, or `career`)
-- `title` (TEXT)
-- `company` (TEXT)
-- `location` (TEXT)
-- `link` (TEXT)
-- `description` (TEXT, raw content scraped)
-- `parsed_json` (TEXT, JSON representation of Gemini-extracted details)
-- `match_score` (INTEGER, default `-1`)
-- `match_pros` (TEXT, JSON list of strings)
-- `match_cons` (TEXT, JSON list of strings)
-- `match_justification` (TEXT)
-- `status` (TEXT, default `'new'`. Options: `'new'`, `'bookmarked'`, `'applied'`, `'rejected'`)
-- `created_at` (TEXT, Timestamp)
-
-### 2. `config`
-Stores configuration key-value pairs.
-- `key` (TEXT, Primary Key)
-- `value` (TEXT)
-- *Preseeded Keys*: `scheduler_interval_hours` (default `'4'`), `scheduler_enabled` (default `'false'`). Other dynamic keys: `cv`, `cv_summary`, `cv_filename`, `keywords`, `exclude_keywords`, `locations`, `companies`, `discord_webhook`, `batch_size`.
-
-### 3. `career_page_cache`
-Caches company career page URLs to avoid repeating search-engine queries.
-- `id` (INTEGER, Primary Key)
-- `company_name` (TEXT, Unique)
-- `career_url` (TEXT)
-- `discovered_at` (TEXT)
-
-### 4. `scrape_history`
-Tracks audit metrics for every scraping execution run.
-- `id` (INTEGER, Primary Key)
-- `started_at` (TEXT)
-- `finished_at` (TEXT)
-- `trigger` (TEXT, `'scheduled'` or `'manual'`)
-- `total_scraped` (INTEGER)
-- `new_jobs` (INTEGER)
-- `matched` (INTEGER)
-- `errors` (TEXT, JSON list of error messages)
-- `status` (TEXT, `'running'`, `'completed'`, or `'failed'`)
-
----
-
-## Scraper Pipeline Details
-
-The orchestrator in [scraperManager.ts](file:///C:/Users/mark2/repos/Jinder/src/scrapers/scraperManager.ts) processes jobs in three phases:
-
-1. **Search & Discovery**:
-   - Executes queries across active scrapers (Profession, No Fluff Jobs, and Company Careers).
-   - Combines results in-memory.
-   - Filters out duplicates against existing database records based on `job_id`.
-   - Filters out jobs containing any configured **Exclude Keywords** (matching on job title at this stage to avoid unnecessary details fetches).
-2. **Polite Detail Extraction**:
-   - For all new listings, the runner visits detail pages sequentially.
-   - Restricts rate by introducing a **1.5-second sleep interval** between fetches.
-   - Once detail text is fetched, checks again for **Exclude Keywords** (matching on job description text) and drops any matches.
-3. **LLM Evaluation**:
-   - Packages new listings into batches of configurable size (defaults to 10, editable in settings).
-   - Submits the CV and batch payload to Gemini using a structured JSON Schema.
-   - **Experience Weighting**: The AI model weights years of experience mismatch heavily; if the job required experience level exceeds the user's CV experience significantly (e.g. user has 3 years, job requires 5+), the score is capped at a maximum of 75%.
-   - If a batch call fails (e.g. due to context length or connection limits), it transparently falls back to individual evaluations.
-   - Saves final records in SQLite and sends webhook notifications if applicable.
-
----
-
-## Background Scheduler, History & Reevaluation
-
-The background service in [scheduler.ts](file:///C:/Users/mark2/repos/Jinder/src/scheduler.ts) manages periodic execution and reevaluation:
-- Automatically loads status from database config upon server bootstrap.
-- Uses standard JS intervals to coordinate execution loops without locking thread execution.
-- Exposes detailed real-time progress indicators: current phase (including `'reevaluating'`), active keyword index, total matching progress, and encountered error count.
-- Logs historical metrics in `scrape_history` for user review.
-- **CV Reevaluation**: Allows reevaluating all existing jobs in the database (e.g. after uploading a new CV) using a customizable batch size.
-
-
----
-
-## Testing & Verification
-
-Jinder comes with a comprehensive, fully-mocked E2E test engine located in [tests/e2e/](file:///C:/Users/mark2/repos/Jinder/tests/e2e/).
-
-### What it does:
-- Starts a mock HTTP server in the background (on port `5001`) that intercepts all requests.
-- Simulates HTML structures for Profession.hu, No Fluff Jobs, Google Search pages, and target company landing pages.
-- Intercepts Gemini API calls (`MOCK_GEMINI=true`), returning deterministic mock JSON scoring, summaries, and career link extraction arrays.
-- Validates edge-cases: duplicate listings, network failures, empty search results, batch-matching fallbacks, and scheduler intervals.
-
-### Executing Tests:
-To run the E2E suite locally:
-1. Set env flags:
-   ```bash
-   $env:NODE_ENV="test"
-   $env:MOCK_GEMINI="true"
-   $env:DB_FILE="jobs.test.db"
-   ```
-2. Run the test suite:
-   ```bash
-   npx tsx tests/e2e/run-tests.ts
-   ```
-Alternatively, execute it through Docker with:
-```bash
-docker compose run --rm tests
-```
-All 63 test cases should pass cleanly, verifying database states, response schema shapes, and backend API routes.
