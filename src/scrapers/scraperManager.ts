@@ -10,6 +10,7 @@ import {
 import { scrapeCareerPages, scrapeCareerPageDetails } from "./careerPages";
 import { closeSharedBrowser } from "../lib/browser";
 import { DETAIL_FETCH_DELAY_MS } from "../lib/constants";
+import { computeDedupeKey } from "../lib/dedupe";
 import { matchJobsInBatches } from "../matching/pipeline";
 import { sendDiscordAlert } from "../notify/discord";
 import config from "../config";
@@ -142,11 +143,14 @@ export async function runScraper(
 
     // Prepared statements for DB queries
     const checkStmt = db.prepare("SELECT id FROM jobs WHERE job_id = ?");
+    const findSiblingStmt = db.prepare(`
+      SELECT * FROM jobs WHERE dedupe_key = ? AND match_score >= 0 ORDER BY id LIMIT 1
+    `);
     const insertStmt = db.prepare(`
       INSERT INTO jobs (
-        job_id, platform, title, company, location, link, description, 
-        parsed_json, match_score, match_pros, match_cons, match_justification, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')
+        job_id, platform, title, company, location, link, description,
+        parsed_json, match_score, match_pros, match_cons, match_justification, dedupe_key, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')
     `);
 
     // 2. Fetch details sequentially for new jobs (polite scraping)
@@ -245,9 +249,48 @@ export async function runScraper(
       }
     }
 
-    // 3. Batch matching with fallback (shared pipeline), saving as results arrive
+    // 3a. Cross-platform dedup: when the same role (company+title) already has
+    // a scored row from another platform, reuse its evaluation instead of
+    // spending another Gemini call. The listing is still saved so every
+    // platform's link is visible, sharing the dedupe_key.
+    const jobsNeedingMatch: NewJobWithDetails[] = [];
+    for (const item of newJobsToMatch) {
+      const dedupeKey = computeDedupeKey(item.job.company, item.job.title);
+      const sibling = dedupeKey ? (findSiblingStmt.get(dedupeKey) as any) : undefined;
+      if (!sibling) {
+        jobsNeedingMatch.push(item);
+        continue;
+      }
+      try {
+        insertStmt.run(
+          item.job.job_id,
+          item.job.platform,
+          sibling.title,
+          sibling.company,
+          item.job.location || sibling.location,
+          item.job.link,
+          item.detailText,
+          sibling.parsed_json,
+          sibling.match_score,
+          sibling.match_pros,
+          sibling.match_cons,
+          sibling.match_justification,
+          dedupeKey,
+        );
+        report.matchedCount++;
+        console.log(
+          `Reused match for "${item.job.title}" (${item.job.platform}) from existing ${sibling.platform} listing. Score: ${sibling.match_score}%`,
+        );
+        onProgress?.({ matched: report.matchedCount });
+      } catch (dupErr: any) {
+        console.error(`Error saving deduped job ${item.job.job_id}:`, dupErr.message);
+        report.errors.push(`Save deduped job ${item.job.job_id}: ${dupErr.message}`);
+      }
+    }
+
+    // 3b. Batch matching with fallback (shared pipeline), saving as results arrive
     await matchJobsInBatches(
-      newJobsToMatch,
+      jobsNeedingMatch,
       (item) => ({
         title: item.job.title,
         company: item.job.company,
@@ -306,6 +349,7 @@ export async function runScraper(
               JSON.stringify(res.pros),
               JSON.stringify(res.cons),
               justification,
+              computeDedupeKey(finalCompany, finalTitle),
             );
 
             console.log(`Saved job "${finalTitle}" to database. Score: ${score}%`);

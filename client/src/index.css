@@ -1846,3 +1846,9 @@ button.location-card {
     grid-template-columns: minmax(340px, 420px) 1fr;
   }
 }
+
+/* Cross-platform dedup badge */
+.platform-badge.sibling-badge {
+  opacity: 0.75;
+  font-style: italic;
+}

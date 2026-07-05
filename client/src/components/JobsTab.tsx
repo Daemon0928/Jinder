@@ -40,6 +40,16 @@ export default function JobsTab({
   onUpdateStatus,
   onDeleteJob,
 }: JobsTabProps) {
+  // Listings of the same role from other platforms (cross-platform dedup)
+  const siblingPlatforms = (job: Job): string[] =>
+    job.dedupe_key
+      ? [...new Set(
+          jobs
+            .filter((j) => j.dedupe_key === job.dedupe_key && j.id !== job.id)
+            .map((j) => j.platform),
+        )]
+      : [];
+
   // Client-side text filter on top of the server-side status/score filters
   const query = filters.searchQuery.toLowerCase();
   const filteredJobs = jobs.filter(
@@ -130,6 +140,11 @@ export default function JobsTab({
                 <div className="job-card-info">
                   <div className="job-card-header">
                     <span className={`platform-badge ${job.platform}`}>{job.platform}</span>
+                    {siblingPlatforms(job).map((platform) => (
+                      <span key={platform} className="platform-badge sibling-badge">
+                        also on {platform}
+                      </span>
+                    ))}
                     {job.status !== 'new' && (
                       <span className="platform-badge" style={{ opacity: 0.6 }}>
                         {job.status}

@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import { computeDedupeKey } from '../lib/dedupe';
 
 const DB_FILE = process.env.DB_FILE || path.join(process.cwd(), 'jobs.db');
 
@@ -67,6 +68,25 @@ const migrations: Array<{ version: number; name: string; up: (d: Database.Databa
           status TEXT DEFAULT 'running'
         )
       `).run();
+    },
+  },
+  {
+    version: 2,
+    name: 'cross-platform dedupe key',
+    up: (d) => {
+      d.prepare('ALTER TABLE jobs ADD COLUMN dedupe_key TEXT').run();
+      d.prepare('CREATE INDEX IF NOT EXISTS idx_jobs_dedupe_key ON jobs(dedupe_key)').run();
+
+      // Backfill existing rows
+      const rows = d.prepare('SELECT id, company, title FROM jobs').all() as Array<{
+        id: number;
+        company: string;
+        title: string;
+      }>;
+      const update = d.prepare('UPDATE jobs SET dedupe_key = ? WHERE id = ?');
+      for (const row of rows) {
+        update.run(computeDedupeKey(row.company, row.title), row.id);
+      }
     },
   },
 ];

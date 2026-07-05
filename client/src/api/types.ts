@@ -27,6 +27,8 @@ export interface Job {
   match_justification: string;
   status: JobStatus;
   created_at: string;
+  /** Shared by listings of the same role scraped from different platforms. */
+  dedupe_key: string | null;
 }
 
 export interface ScrapeProgress {
