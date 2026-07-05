@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { Job } from '../api/types';
 import { JOB_STATUSES, STATUS_LABELS } from '../api/types';
 import { BackArrowIcon } from './ui/Icon';
@@ -19,11 +19,6 @@ export default function JobDetails({
   onDelete,
 }: JobDetailsProps) {
   const [notes, setNotes] = useState(job.notes ?? '');
-
-  // Re-sync when a different job is selected (or notes change server-side).
-  useEffect(() => {
-    setNotes(job.notes ?? '');
-  }, [job.id, job.notes]);
 
   const notesDirty = notes !== (job.notes ?? '');
 

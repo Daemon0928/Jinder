@@ -175,6 +175,7 @@ export default function JobsTab({
         <div className="job-details-container">
           {selectedJob ? (
             <JobDetails
+              key={JSON.stringify([selectedJob.id, selectedJob.notes ?? ''])}
               job={selectedJob}
               onBack={() => onSelectJob(null)}
               onUpdateStatus={onUpdateStatus}

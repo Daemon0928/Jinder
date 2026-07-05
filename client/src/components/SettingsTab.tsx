@@ -70,7 +70,7 @@ export default function SettingsTab({
   ) => {
     try {
       await api.updateDigestConfig(patch);
-      refreshDigest();
+      void refreshDigest();
       showToast('Digest settings updated.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Failed to update digest', 'error');
@@ -80,7 +80,7 @@ export default function SettingsTab({
   const handleSendDigest = async () => {
     try {
       const res = await api.sendDigest();
-      refreshDigest();
+      void refreshDigest();
       showToast(
         res.sent
           ? `Digest sent with ${res.jobCount} job${res.jobCount === 1 ? '' : 's'}.`
