@@ -44,20 +44,26 @@ export function initTestDb() {
 }
 
 export function resetTestDb() {
-  const shmFile = `${DB_FILE}-shm`;
-  const walFile = `${DB_FILE}-wal`;
-
-  // Try to un-link DB files, but if they are locked, clear tables instead.
-  try {
-    if (fs.existsSync(DB_FILE)) fs.unlinkSync(DB_FILE);
-    if (fs.existsSync(shmFile)) fs.unlinkSync(shmFile);
-    if (fs.existsSync(walFile)) fs.unlinkSync(walFile);
-  } catch (e) {
-    // Truncate tables if file is locked by the active application server
+  // NEVER unlink the file while the app server may hold it open. On Windows
+  // the unlink fails (lock) so this used to fall back to truncation — but on
+  // Linux the unlink silently succeeds and the server keeps writing to the
+  // deleted inode, leaving the runner and the server on two different
+  // databases (every dbState assertion diverges; jobs pile up across tests).
+  if (fs.existsSync(DB_FILE)) {
     try {
       const db = getTestDb();
-      db.prepare('DELETE FROM jobs').run();
-      db.prepare('DELETE FROM config').run();
+      for (const table of ['jobs', 'config', 'career_page_cache', 'scrape_history']) {
+        try {
+          db.prepare(`DELETE FROM ${table}`).run();
+        } catch {
+          // table not created yet (server hasn't run its migrations) — fine
+        }
+      }
+      try {
+        db.prepare('DELETE FROM sqlite_sequence').run();
+      } catch {
+        // absent until the first autoincrement insert — fine
+      }
       db.close();
       return;
     } catch (err) {
