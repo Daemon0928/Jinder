@@ -1,4 +1,5 @@
 import type { Job } from '../api/types';
+import { JOB_STATUSES, STATUS_LABELS } from '../api/types';
 import JobDetails from './JobDetails';
 import Spinner from './ui/Spinner';
 
@@ -18,6 +19,7 @@ interface JobsTabProps {
   onSelectJob: (job: Job | null) => void;
   onRetry: () => void;
   onUpdateStatus: (id: number, status: Job['status']) => void;
+  onUpdateNotes: (id: number, notes: string) => void;
   onDeleteJob: (id: number) => void;
 }
 
@@ -38,6 +40,7 @@ export default function JobsTab({
   onSelectJob,
   onRetry,
   onUpdateStatus,
+  onUpdateNotes,
   onDeleteJob,
 }: JobsTabProps) {
   // Listings of the same role from other platforms (cross-platform dedup)
@@ -84,10 +87,11 @@ export default function JobsTab({
             onChange={(e) => onFiltersChange({ statusFilter: e.target.value })}
           >
             <option value="all">All Jobs</option>
-            <option value="new">New Matches</option>
-            <option value="bookmarked">Bookmarked</option>
-            <option value="applied">Applied</option>
-            <option value="rejected">Not Interested</option>
+            {JOB_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {STATUS_LABELS[status]}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -174,6 +178,7 @@ export default function JobsTab({
               job={selectedJob}
               onBack={() => onSelectJob(null)}
               onUpdateStatus={onUpdateStatus}
+              onUpdateNotes={onUpdateNotes}
               onDelete={onDeleteJob}
             />
           ) : (

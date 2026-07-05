@@ -28,6 +28,13 @@ function maskSecret(value: string): string {
   return `${MASK_CHAR.repeat(8)}${tail}`;
 }
 
+function readConfigValue(key: string): string {
+  const row = db.prepare('SELECT value FROM config WHERE key = ?').get(key) as
+    | { value: string }
+    | undefined;
+  return row?.value ?? '';
+}
+
 function readJsonArray(key: string): string[] {
   const row = db.prepare('SELECT value FROM config WHERE key = ?').get(key) as { value: string } | undefined;
   try {
@@ -65,7 +72,18 @@ router.get('/', (req, res) => {
       discordWebhookSet: Boolean(discordWebhookRow && discordWebhookRow.value),
       locations: readJsonArray('locations'),
       companies: readJsonArray('companies'),
-      batchSize
+      batchSize,
+      // SMTP settings for the email digest channel. The password is a
+      // write-only secret — never echoed back, only its "set" flag.
+      email: {
+        smtpHost: readConfigValue('smtp_host'),
+        smtpPort: readConfigValue('smtp_port'),
+        smtpSecure: readConfigValue('smtp_secure') === 'true',
+        smtpUser: readConfigValue('smtp_user'),
+        smtpPassSet: Boolean(readConfigValue('smtp_pass')),
+        from: readConfigValue('email_from'),
+        to: readConfigValue('email_to'),
+      },
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -75,7 +93,7 @@ router.get('/', (req, res) => {
 // Save configuration (CV and keywords)
 router.post('/', (req, res) => {
   try {
-    const { cv, keywords, excludeKeywords, discordWebhook, locations, companies, batchSize } = req.body;
+    const { cv, keywords, excludeKeywords, discordWebhook, locations, companies, batchSize, email } = req.body;
 
     const upsertStmt = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
 
@@ -121,6 +139,30 @@ router.post('/', (req, res) => {
         return res.status(400).json({ error: 'Batch size must be a positive integer' });
       }
       upsertStmt.run('batch_size', String(parsed));
+    }
+    if (email !== undefined) {
+      if (typeof email !== 'object' || email === null) {
+        return res.status(400).json({ error: 'email must be an object' });
+      }
+      const strField = (v: unknown) => (typeof v === 'string' ? v : undefined);
+      const map: Record<string, string | undefined> = {
+        smtp_host: strField(email.smtpHost),
+        smtp_port: email.smtpPort !== undefined ? String(email.smtpPort) : undefined,
+        smtp_user: strField(email.smtpUser),
+        email_from: strField(email.from),
+        email_to: strField(email.to),
+      };
+      for (const [key, value] of Object.entries(map)) {
+        if (value !== undefined) upsertStmt.run(key, value);
+      }
+      if (email.smtpSecure !== undefined) {
+        upsertStmt.run('smtp_secure', email.smtpSecure ? 'true' : 'false');
+      }
+      // Password is write-only: only overwrite when a non-empty value is sent,
+      // so re-saving other settings never wipes the stored secret.
+      if (typeof email.smtpPass === 'string' && email.smtpPass !== '') {
+        upsertStmt.run('smtp_pass', email.smtpPass);
+      }
     }
 
     res.json({ success: true });

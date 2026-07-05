@@ -13,6 +13,15 @@ const emptyConfig: AppConfig = {
   locations: [],
   companies: [],
   batchSize: 10,
+  email: {
+    smtpHost: '',
+    smtpPort: '',
+    smtpSecure: false,
+    smtpUser: '',
+    smtpPassSet: false,
+    from: '',
+    to: '',
+  },
 };
 
 /** Editable app configuration backed by GET/POST /api/config. */
@@ -31,6 +40,7 @@ export function useConfig() {
         locations: data.locations || [],
         companies: data.companies || [],
         batchSize: data.batchSize || 10,
+        email: { ...emptyConfig.email, ...(data.email || {}) },
       });
       setError(null);
     } catch (err) {
@@ -58,6 +68,7 @@ export function useConfig() {
       locations: current.locations,
       companies: current.companies,
       batchSize: current.batchSize,
+      email: current.email,
     });
   }, []);
 

@@ -2,7 +2,7 @@ import db from './db/database';
 import { runScraper } from './scrapers/scraperManager';
 import { ScrapeReport, ScrapeProgress } from './types';
 import { matchJobsInBatches } from './matching/pipeline';
-import { sendDiscordAlert } from './notify/discord';
+import { dispatchAlert } from './notify';
 import config from './config';
 
 export interface SchedulerStatus {
@@ -469,7 +469,7 @@ export class SchedulerService {
               this.progress.matched++;
 
               if (score >= config.MATCH_ALERT_THRESHOLD) {
-                await sendDiscordAlert({
+                await dispatchAlert({
                   title: finalTitle,
                   company: finalCompany,
                   location: finalLocation,

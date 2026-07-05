@@ -12,7 +12,7 @@ import { closeSharedBrowser } from "../lib/browser";
 import { DETAIL_FETCH_DELAY_MS } from "../lib/constants";
 import { computeDedupeKey } from "../lib/dedupe";
 import { matchJobsInBatches } from "../matching/pipeline";
-import { sendDiscordAlert } from "../notify/discord";
+import { dispatchAlert } from "../notify";
 import config from "../config";
 import { ScrapeReport, ScrapeProgress, ProgressCallback } from "../types";
 
@@ -355,7 +355,7 @@ export async function runScraper(
             console.log(`Saved job "${finalTitle}" to database. Score: ${score}%`);
 
             if (score >= config.MATCH_ALERT_THRESHOLD) {
-              await sendDiscordAlert({
+              await dispatchAlert({
                 title: finalTitle,
                 company: finalCompany,
                 location: finalLocation,

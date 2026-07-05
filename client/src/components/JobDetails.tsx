@@ -1,14 +1,32 @@
+import { useEffect, useState } from 'react';
 import type { Job } from '../api/types';
+import { JOB_STATUSES, STATUS_LABELS } from '../api/types';
 import { BackArrowIcon } from './ui/Icon';
 
 interface JobDetailsProps {
   job: Job;
   onBack: () => void;
   onUpdateStatus: (id: number, status: Job['status']) => void;
+  onUpdateNotes: (id: number, notes: string) => void;
   onDelete: (id: number) => void;
 }
 
-export default function JobDetails({ job, onBack, onUpdateStatus, onDelete }: JobDetailsProps) {
+export default function JobDetails({
+  job,
+  onBack,
+  onUpdateStatus,
+  onUpdateNotes,
+  onDelete,
+}: JobDetailsProps) {
+  const [notes, setNotes] = useState(job.notes ?? '');
+
+  // Re-sync when a different job is selected (or notes change server-side).
+  useEffect(() => {
+    setNotes(job.notes ?? '');
+  }, [job.id, job.notes]);
+
+  const notesDirty = notes !== (job.notes ?? '');
+
   return (
     <>
       <div className="details-header">
@@ -112,30 +130,44 @@ export default function JobDetails({ job, onBack, onUpdateStatus, onDelete }: Jo
             {job.parsed_json?.description || job.description.substring(0, 300) + '...'}
           </p>
         </div>
+
+        {/* Application notes */}
+        <div>
+          <div className="section-title">🗒️ My Notes</div>
+          <textarea
+            className="notes-textarea"
+            placeholder="Track application details, contacts, interview dates…"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={4}
+          />
+          <div className="notes-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={!notesDirty}
+              onClick={() => onUpdateNotes(job.id, notes)}
+            >
+              {notesDirty ? 'Save Notes' : 'Notes Saved'}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="details-footer">
-        <button
-          type="button"
-          className={`btn ${job.status === 'bookmarked' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => onUpdateStatus(job.id, 'bookmarked')}
-        >
-          Bookmark
-        </button>
-        <button
-          type="button"
-          className={`btn ${job.status === 'applied' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => onUpdateStatus(job.id, 'applied')}
-        >
-          Applied
-        </button>
-        <button
-          type="button"
-          className={`btn ${job.status === 'rejected' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => onUpdateStatus(job.id, 'rejected')}
-        >
-          Reject
-        </button>
+        <span className="pipeline-label">Pipeline stage:</span>
+        <div className="pipeline-stage-buttons">
+          {JOB_STATUSES.map((status) => (
+            <button
+              key={status}
+              type="button"
+              className={`btn stage-btn ${job.status === status ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => onUpdateStatus(job.id, status)}
+            >
+              {STATUS_LABELS[status]}
+            </button>
+          ))}
+        </div>
       </div>
     </>
   );

@@ -5,11 +5,13 @@ import path from 'path';
 import fs from 'fs';
 import db, { initDatabase } from './db/database';
 import { schedulerService } from './scheduler';
+import { digestService } from './digest';
 import { requireAuth, warnIfAuthDisabled } from './middleware/auth';
 import jobsRouter from './routes/jobs';
 import configRouter from './routes/config';
 import scrapeRouter from './routes/scrape';
 import analyticsRouter from './routes/analytics';
+import digestRouter from './routes/digest';
 
 const app = express();
 const PORT = config.PORT;
@@ -46,6 +48,7 @@ app.get('/healthz', (req, res) => {
 app.use('/api/jobs', jobsRouter);
 app.use('/api/config', configRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/digest', digestRouter);
 app.use('/api', scrapeRouter); // /api/scrape*, /api/scheduler/*, /api/scrape-history
 
 // --- Serve Frontend Static Files in Production ---
@@ -84,6 +87,7 @@ function shutdown(signal: string) {
   shuttingDown = true;
   console.log(`${signal} received — shutting down...`);
   schedulerService.stop();
+  digestService.stop();
   server.close(() => {
     try {
       db.close();

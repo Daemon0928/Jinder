@@ -19,13 +19,15 @@ const demoJobs = [
   { title: 'Node.js Backend Engineer', company: 'SEON', location: 'Budapest', platform: 'career', score: 86, tech: ['Node.js', 'TypeScript', 'Redis'], salary: '1.3M – 1.6M HUF', pros: ['Direct Node.js/TypeScript match', 'Fraud-prevention domain is learnable'], cons: ['High-throughput systems experience unproven'], justification: 'Core stack is an excellent match; scale experience is the main open question.' },
 ];
 
-const statuses = ['new', 'new', 'new', 'bookmarked', 'new', 'applied', 'rejected', 'new'];
+// Spread demo jobs across the application pipeline so the board looks alive.
+const statuses = ['new', 'interested', 'new', 'interview', 'new', 'applied', 'rejected', 'offer'];
+const notes = ['', 'Reached out to recruiter on LinkedIn.', '', 'Tech interview scheduled for next week.', '', 'Submitted application via careers page.', 'Not a fit — Java-heavy.', 'Verbal offer received, reviewing package.'];
 
 const insert = db.prepare(`
   INSERT OR IGNORE INTO jobs (
     job_id, platform, title, company, location, link, description,
-    parsed_json, match_score, match_pros, match_cons, match_justification, status
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    parsed_json, match_score, match_pros, match_cons, match_justification, status, notes
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 let inserted = 0;
@@ -52,6 +54,7 @@ demoJobs.forEach((job, i) => {
     JSON.stringify(job.cons),
     job.justification,
     statuses[i],
+    notes[i],
   );
   inserted += Number(info.changes);
 });

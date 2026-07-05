@@ -12,6 +12,7 @@ import { Sidebar, MobileBottomNav } from './components/Nav';
 import type { Tab } from './components/Nav';
 import ScrapeProgressPanel from './components/ScrapeProgressPanel';
 import JobsTab from './components/JobsTab';
+import BoardTab from './components/BoardTab';
 import AnalyticsTab from './components/AnalyticsTab';
 import CvTab from './components/CvTab';
 import SettingsTab from './components/SettingsTab';
@@ -20,6 +21,7 @@ import { RefreshIcon } from './components/ui/Icon';
 
 const TAB_HEADERS: Record<Tab, { title: string; subtitle: string }> = {
   jobs: { title: 'Your Job Matches', subtitle: 'AI-scored job postings scraped from Hungarian portals' },
+  board: { title: 'Application Board', subtitle: 'Drag jobs through your application pipeline' },
   analytics: { title: 'Analytics', subtitle: 'Match quality and scraping activity at a glance' },
   cv: { title: 'My CV & Profile', subtitle: 'Upload CV details used for semantic similarity checks' },
   settings: {
@@ -87,6 +89,24 @@ function AppShell() {
     },
     [refreshJobs, showToast],
   );
+
+  const handleUpdateNotes = useCallback(
+    async (id: number, notes: string) => {
+      try {
+        await api.updateJobNotes(id, notes);
+        void refreshJobs();
+        showToast('Notes saved.', 'success');
+      } catch (err) {
+        showToast(err instanceof ApiError ? err.message : 'Failed to save notes', 'error');
+      }
+    },
+    [refreshJobs, showToast],
+  );
+
+  const handleOpenJobFromBoard = useCallback((job: Job) => {
+    setSelectedJob(job);
+    setActiveTab('jobs');
+  }, []);
 
   const confirmDeleteJob = useCallback(async () => {
     if (pendingDeleteId === null) return;
@@ -160,9 +180,12 @@ function AppShell() {
             onSelectJob={setSelectedJob}
             onRetry={refreshJobs}
             onUpdateStatus={handleUpdateStatus}
+            onUpdateNotes={handleUpdateNotes}
             onDeleteJob={setPendingDeleteId}
           />
         )}
+
+        {activeTab === 'board' && <BoardTab onOpenJob={handleOpenJobFromBoard} />}
 
         {activeTab === 'analytics' && <AnalyticsTab />}
 

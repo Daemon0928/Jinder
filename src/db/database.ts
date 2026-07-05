@@ -89,6 +89,19 @@ const migrations: Array<{ version: number; name: string; up: (d: Database.Databa
       }
     },
   },
+  {
+    version: 3,
+    name: 'application pipeline: notes column + richer statuses',
+    up: (d) => {
+      // Per-job free-text notes for the application-tracking board.
+      d.prepare('ALTER TABLE jobs ADD COLUMN notes TEXT').run();
+
+      // The pipeline replaces the old flat "bookmarked" flag with a staged
+      // funnel (new → interested → applied → interview → offer → rejected).
+      // Existing bookmarked rows map cleanly onto "interested".
+      d.prepare("UPDATE jobs SET status = 'interested' WHERE status = 'bookmarked'").run();
+    },
+  },
 ];
 
 export function initDatabase() {
@@ -108,6 +121,10 @@ export function initDatabase() {
   const insertConfig = db.prepare('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)');
   insertConfig.run('scheduler_interval_hours', '4');
   insertConfig.run('scheduler_enabled', 'false');
+  insertConfig.run('digest_enabled', 'false');
+  insertConfig.run('digest_interval_days', '7');
+  insertConfig.run('digest_min_score', '80');
+  insertConfig.run('digest_max_jobs', '10');
 
   console.log('Database initialized successfully at:', DB_FILE);
 }

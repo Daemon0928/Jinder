@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client';
 import type { AppConfig, SchedulerStatus } from '../api/types';
 import { LOCATION_OPTIONS } from '../constants';
 import { useToast } from '../context/toast';
+import { useDigest } from '../hooks/useDigest';
 import TagManager from './ui/TagManager';
 
 interface SettingsTabProps {
@@ -21,6 +22,7 @@ export default function SettingsTab({
   onSchedulerChanged,
 }: SettingsTabProps) {
   const { showToast } = useToast();
+  const { status: digestStatus, refresh: refreshDigest } = useDigest(true);
   const [intervalHours, setIntervalHours] = useState<number | null>(null);
   const schedulerEnabled = schedulerStatus?.enabled ?? false;
   const effectiveInterval = intervalHours ?? schedulerStatus?.intervalHours ?? 4;
@@ -58,6 +60,39 @@ export default function SettingsTab({
       showToast(err instanceof ApiError ? err.message : 'Error saving settings', 'error');
     }
   };
+
+  const updateEmail = (partial: Partial<AppConfig['email']>) => {
+    onConfigChange({ email: { ...config.email, ...partial } });
+  };
+
+  const handleDigestConfig = async (
+    patch: Partial<{ enabled: boolean; intervalDays: number; minScore: number; maxJobs: number }>,
+  ) => {
+    try {
+      await api.updateDigestConfig(patch);
+      refreshDigest();
+      showToast('Digest settings updated.', 'success');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Failed to update digest', 'error');
+    }
+  };
+
+  const handleSendDigest = async () => {
+    try {
+      const res = await api.sendDigest();
+      refreshDigest();
+      showToast(
+        res.sent
+          ? `Digest sent with ${res.jobCount} job${res.jobCount === 1 ? '' : 's'}.`
+          : 'No new matches to include in a digest right now.',
+        res.sent ? 'success' : 'error',
+      );
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Failed to send digest', 'error');
+    }
+  };
+
+  const digestEnabled = digestStatus?.enabled ?? false;
 
   const workStyles = LOCATION_OPTIONS.filter((opt) => opt.isWorkStyle);
   const cities = LOCATION_OPTIONS.filter((opt) => !opt.isWorkStyle);
@@ -249,6 +284,182 @@ export default function SettingsTab({
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="form-group" style={{ marginBottom: '32px' }}>
+        <label>📧 Email (SMTP) for Digests</label>
+        <p className="card-description" style={{ marginBottom: '12px' }}>
+          Configure an SMTP server to receive the weekly digest by email. Saved with the button
+          below.
+        </p>
+        <div className="smtp-grid">
+          <div className="form-group">
+            <label htmlFor="smtp-host" className="sub-label">Host</label>
+            <input
+              id="smtp-host"
+              type="text"
+              placeholder="smtp.gmail.com"
+              value={config.email.smtpHost}
+              onChange={(e) => updateEmail({ smtpHost: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="smtp-port" className="sub-label">Port</label>
+            <input
+              id="smtp-port"
+              type="text"
+              placeholder="587"
+              value={config.email.smtpPort}
+              onChange={(e) => updateEmail({ smtpPort: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="smtp-user" className="sub-label">Username</label>
+            <input
+              id="smtp-user"
+              type="text"
+              placeholder="you@gmail.com"
+              value={config.email.smtpUser}
+              onChange={(e) => updateEmail({ smtpUser: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="smtp-pass" className="sub-label">
+              Password {config.email.smtpPassSet && '(set — leave blank to keep)'}
+            </label>
+            <input
+              id="smtp-pass"
+              type="password"
+              placeholder={config.email.smtpPassSet ? '••••••••' : 'app password'}
+              value={config.email.smtpPass ?? ''}
+              onChange={(e) => updateEmail({ smtpPass: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="email-from" className="sub-label">From</label>
+            <input
+              id="email-from"
+              type="text"
+              placeholder="Jinder <you@gmail.com>"
+              value={config.email.from}
+              onChange={(e) => updateEmail({ from: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="email-to" className="sub-label">To</label>
+            <input
+              id="email-to"
+              type="text"
+              placeholder="you@gmail.com"
+              value={config.email.to}
+              onChange={(e) => updateEmail({ to: e.target.value })}
+            />
+          </div>
+        </div>
+        <label className="smtp-secure-row">
+          <input
+            type="checkbox"
+            checked={config.email.smtpSecure}
+            onChange={(e) => updateEmail({ smtpSecure: e.target.checked })}
+          />
+          Use TLS on connect (port 465)
+        </label>
+      </div>
+
+      <div className="form-group scheduler-section">
+        <label>📬 Weekly Match Digest</label>
+        <p className="card-description" style={{ marginBottom: '16px' }}>
+          Periodically send a roundup of your top new matches to every configured channel
+          (Discord and/or Email).
+        </p>
+
+        <div className="scheduler-settings-box">
+          <div className="scheduler-status-row">
+            <div>
+              <span style={{ fontSize: '14px', fontWeight: 'bold', marginRight: '8px' }}>
+                Digest:
+              </span>
+              <span className={`scheduler-badge ${digestEnabled ? 'enabled' : 'disabled'}`}>
+                {digestEnabled ? 'ENABLED' : 'DISABLED'}
+              </span>
+            </div>
+            <button
+              type="button"
+              className={`btn ${digestEnabled ? 'btn-secondary' : 'btn-primary'}`}
+              onClick={() => handleDigestConfig({ enabled: !digestEnabled })}
+            >
+              {digestEnabled ? 'Disable Digest' : 'Enable Digest'}
+            </button>
+          </div>
+
+          <div className="digest-fields">
+            <div className="form-group">
+              <label htmlFor="digest-interval" className="sub-label">Every (days)</label>
+              <input
+                id="digest-interval"
+                type="number"
+                min="1"
+                max="90"
+                defaultValue={digestStatus?.intervalDays ?? 7}
+                onBlur={(e) => handleDigestConfig({ intervalDays: Number(e.target.value) })}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="digest-minscore" className="sub-label">Min score</label>
+              <input
+                id="digest-minscore"
+                type="number"
+                min="0"
+                max="100"
+                defaultValue={digestStatus?.minScore ?? 80}
+                onBlur={(e) => handleDigestConfig({ minScore: Number(e.target.value) })}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="digest-maxjobs" className="sub-label">Max jobs</label>
+              <input
+                id="digest-maxjobs"
+                type="number"
+                min="1"
+                max="50"
+                defaultValue={digestStatus?.maxJobs ?? 10}
+                onBlur={(e) => handleDigestConfig({ maxJobs: Number(e.target.value) })}
+              />
+            </div>
+          </div>
+
+          <div className="scheduler-info">
+            <div>
+              📡 <strong>Channels:</strong>{' '}
+              {digestStatus && digestStatus.channels.length > 0
+                ? digestStatus.channels.join(', ')
+                : 'none configured'}
+            </div>
+            <div>
+              📥 <strong>Pending matches:</strong> {digestStatus?.pendingCount ?? 0}
+            </div>
+            {digestEnabled && digestStatus?.nextRunAt && (
+              <div>
+                📅 <strong>Next digest:</strong>{' '}
+                {new Date(digestStatus.nextRunAt).toLocaleString()}
+              </div>
+            )}
+            {digestStatus?.lastSentAt && (
+              <div>
+                ✅ <strong>Last sent:</strong> {new Date(digestStatus.lastSentAt).toLocaleString()}
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ marginTop: '12px' }}
+            onClick={handleSendDigest}
+          >
+            Send Digest Now
+          </button>
         </div>
       </div>
 

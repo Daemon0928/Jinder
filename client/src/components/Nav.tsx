@@ -1,6 +1,6 @@
-import { BriefcaseIcon, ChartIcon, DocumentIcon, GearIcon, RefreshIcon } from './ui/Icon';
+import { BriefcaseIcon, BoardIcon, ChartIcon, DocumentIcon, GearIcon, RefreshIcon } from './ui/Icon';
 
-export type Tab = 'jobs' | 'analytics' | 'settings' | 'cv';
+export type Tab = 'jobs' | 'board' | 'analytics' | 'settings' | 'cv';
 
 interface NavProps {
   activeTab: Tab;
@@ -13,6 +13,7 @@ interface NavProps {
 
 const NAV_ITEMS: Array<{ tab: Tab; label: string; mobileLabel: string; icon: typeof BriefcaseIcon }> = [
   { tab: 'jobs', label: 'Matched Jobs', mobileLabel: 'Jobs', icon: BriefcaseIcon },
+  { tab: 'board', label: 'Application Board', mobileLabel: 'Board', icon: BoardIcon },
   { tab: 'analytics', label: 'Analytics', mobileLabel: 'Stats', icon: ChartIcon },
   { tab: 'cv', label: 'CV & Profile', mobileLabel: 'CV', icon: DocumentIcon },
   { tab: 'settings', label: 'Scraper Settings', mobileLabel: 'Settings', icon: GearIcon },

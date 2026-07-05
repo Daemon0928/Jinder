@@ -164,10 +164,11 @@ async function run() {
         }
 
         // Extra seeds for specific tests (e.g. jobs table)
-        if (tc.id === 'E2E-T1-04' || tc.id === 'E2E-T1-05' || tc.id === 'E2E-T1-06' || 
-            tc.id === 'E2E-T1-07' || tc.id === 'E2E-T1-08' || tc.id === 'E2E-T1-09' || 
+        if (tc.id === 'E2E-T1-04' || tc.id === 'E2E-T1-05' || tc.id === 'E2E-T1-06' ||
+            tc.id === 'E2E-T1-07' || tc.id === 'E2E-T1-08' || tc.id === 'E2E-T1-09' ||
             tc.id === 'E2E-T1-10' || tc.id === 'E2E-T1-11' || tc.id === 'E2E-T1-20' ||
-            tc.id === 'E2E-T3-04' || tc.id === 'E2E-T4-08') {
+            tc.id === 'E2E-T3-04' || tc.id === 'E2E-T4-08' ||
+            tc.id === 'E2E-T6-01' || tc.id === 'E2E-T6-02' || tc.id === 'E2E-T6-03') {
           seedJobsTable([
             {
               id: 1,
@@ -178,6 +179,38 @@ async function run() {
               location: 'Budapest',
               link: 'http://localhost:5001/allas/test-job-1',
               description: 'Test details',
+              status: 'new'
+            }
+          ]);
+        }
+
+        // Digest send test needs high-scoring new jobs to roll up.
+        if (tc.id === 'E2E-T6-05') {
+          seedJobsTable([
+            {
+              id: 1,
+              job_id: 'digest-job-1',
+              platform: 'nofluffjobs',
+              title: 'Senior TypeScript Engineer',
+              company: 'Digest Co',
+              location: 'Budapest',
+              link: 'http://localhost:5001/allas/digest-1',
+              description: 'Details',
+              match_score: 92,
+              match_justification: 'Strong overlap',
+              status: 'new'
+            },
+            {
+              id: 2,
+              job_id: 'digest-job-2',
+              platform: 'profession',
+              title: 'React Developer',
+              company: 'Digest Corp',
+              location: 'Budapest',
+              link: 'http://localhost:5001/allas/digest-2',
+              description: 'Details',
+              match_score: 85,
+              match_justification: 'Good fit',
               status: 'new'
             }
           ]);

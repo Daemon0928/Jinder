@@ -136,17 +136,17 @@ for (let i = 1; i <= 26; i++) {
       };
       break;
     case 5:
-      name = "PATCH /api/jobs/:id updates job status to bookmarked";
-      description = "Tests status update transition to bookmarked.";
+      name = "PATCH /api/jobs/:id updates job status to interested";
+      description = "Tests status update transition to interested.";
       action = 'api_jobs_patch';
-      params = { id: 1, body: { status: 'bookmarked' } };
+      params = { id: 1, body: { status: 'interested' } };
       assertions = {
         status: 200,
-        responseBodyEquals: { success: true, id: "1", status: "bookmarked" },
+        responseBodyEquals: { success: true, id: "1", status: "interested" },
         dbState: {
           table: 'jobs',
           where: "id = 1",
-          expectedRows: [{ status: 'bookmarked' }]
+          expectedRows: [{ status: 'interested' }]
         }
       };
       break;
@@ -184,7 +184,7 @@ for (let i = 1; i <= 26; i++) {
       name = "PATCH /api/jobs/:id returns 404 for non-existent job ID";
       description = "Verifies error when patching a non-existent job ID.";
       action = 'api_jobs_patch';
-      params = { id: 9999, body: { status: 'bookmarked' } };
+      params = { id: 9999, body: { status: 'interested' } };
       assertions = {
         status: 404,
         responseBodyContains: ["Job not found"]
@@ -1181,6 +1181,121 @@ testCases.push({
   assertions: {
     status: 400,
     responseBodyContains: ['Discord webhook']
+  }
+});
+
+// --- Tier 6: application pipeline (notes + richer statuses) and digest ---
+
+testCases.push({
+  id: 'E2E-T6-01',
+  name: 'PATCH /api/jobs/:id moves a job to the interview stage',
+  tier: 4,
+  description: 'The new pipeline statuses (interview/offer) are accepted.',
+  configSetup: {},
+  mockServerBehavior: {},
+  execute: {
+    action: 'http_request',
+    params: { method: 'patch', path: '/api/jobs/1', body: { status: 'interview' } }
+  },
+  assertions: {
+    status: 200,
+    dbState: {
+      table: 'jobs',
+      where: 'id = 1',
+      expectedRows: [{ status: 'interview' }]
+    }
+  }
+});
+
+testCases.push({
+  id: 'E2E-T6-02',
+  name: 'PATCH /api/jobs/:id saves free-text notes',
+  tier: 4,
+  description: 'Notes are persisted independently of status.',
+  configSetup: {},
+  mockServerBehavior: {},
+  execute: {
+    action: 'http_request',
+    params: { method: 'patch', path: '/api/jobs/1', body: { notes: 'Call recruiter Monday' } }
+  },
+  assertions: {
+    status: 200,
+    dbState: {
+      table: 'jobs',
+      where: 'id = 1',
+      expectedRows: [{ notes: 'Call recruiter Monday' }]
+    }
+  }
+});
+
+testCases.push({
+  id: 'E2E-T6-03',
+  name: 'PATCH /api/jobs/:id rejects an empty update',
+  tier: 4,
+  description: 'A PATCH with neither status nor notes is a 400.',
+  configSetup: {},
+  mockServerBehavior: {},
+  execute: {
+    action: 'http_request',
+    params: { method: 'patch', path: '/api/jobs/1', body: {} }
+  },
+  assertions: {
+    status: 400,
+    responseBodyContains: ['Provide status and/or notes']
+  }
+});
+
+testCases.push({
+  id: 'E2E-T6-04',
+  name: 'GET /api/digest/status reports channels and settings',
+  tier: 4,
+  description: 'Digest status exposes configured channels and pending count.',
+  configSetup: { discordWebhook: 'http://localhost:5001/webhook' },
+  mockServerBehavior: {},
+  execute: {
+    action: 'http_request',
+    params: { method: 'get', path: '/api/digest/status' }
+  },
+  assertions: {
+    status: 200,
+    responseBodyContains: ['channels', 'pendingCount', 'discord']
+  }
+});
+
+testCases.push({
+  id: 'E2E-T6-05',
+  name: 'POST /api/digest/send delivers a digest to Discord',
+  tier: 4,
+  description: 'Seeded high-score new jobs are rolled up and posted to the webhook.',
+  configSetup: { discordWebhook: 'http://localhost:5001/webhook' },
+  mockServerBehavior: {},
+  execute: {
+    action: 'http_request',
+    params: { method: 'post', path: '/api/digest/send' }
+  },
+  assertions: {
+    status: 200,
+    responseBodyContains: ['"sent":true'],
+    webhookTriggered: true,
+    webhookPayloadContains: ['digest']
+  }
+});
+
+testCases.push({
+  id: 'E2E-T6-06',
+  name: 'POST /api/digest/send is a no-op with no qualifying matches',
+  tier: 4,
+  description: 'With an empty jobs table no digest is sent and no webhook fires.',
+  configSetup: { discordWebhook: 'http://localhost:5001/webhook' },
+  mockServerBehavior: {},
+  execute: {
+    action: 'http_request',
+    params: { method: 'post', path: '/api/digest/send' }
+  },
+  assertions: {
+    status: 200,
+    responseBodyContains: ['"sent":false'],
+    webhookTriggered: false
   }
 });
 

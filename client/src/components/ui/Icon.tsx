@@ -54,6 +54,15 @@ export function ChartIcon({ size = 18, strokeWidth = 2 }: IconProps) {
   );
 }
 
+export function BoardIcon({ size = 18, strokeWidth = 2 }: IconProps) {
+  return (
+    <svg {...svgProps(size, strokeWidth)}>
+      <rect width="6" height="18" x="3" y="3" rx="1" />
+      <rect width="6" height="12" x="15" y="3" rx="1" />
+    </svg>
+  );
+}
+
 export function RefreshIcon({ size = 16, strokeWidth = 2 }: IconProps) {
   return (
     <svg {...svgProps(size, strokeWidth)}>

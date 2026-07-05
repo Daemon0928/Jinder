@@ -6,6 +6,8 @@ import type {
   CvUploadResult,
   JobStatus,
   AnalyticsData,
+  DigestStatus,
+  DigestPreview,
 } from './types';
 
 /** Error carrying the server-provided message when one exists. */
@@ -65,6 +67,10 @@ export const api = {
     return postJson<{ success: boolean }>(`/api/jobs/${id}`, { status }, 'PATCH');
   },
 
+  updateJobNotes(id: number, notes: string) {
+    return postJson<{ success: boolean }>(`/api/jobs/${id}`, { notes }, 'PATCH');
+  },
+
   deleteJob(id: number) {
     return request<{ success: boolean }>(`/api/jobs/${id}`, { method: 'DELETE' });
   },
@@ -111,5 +117,23 @@ export const api = {
 
   updateSchedulerInterval(intervalHours: number) {
     return postJson<{ success: boolean }>('/api/scheduler/config', { intervalHours }, 'PUT');
+  },
+
+  getDigestStatus(): Promise<DigestStatus> {
+    return request<DigestStatus>('/api/digest/status');
+  },
+
+  getDigestPreview(): Promise<DigestPreview> {
+    return request<DigestPreview>('/api/digest/preview');
+  },
+
+  sendDigest() {
+    return request<{ success: boolean; sent: boolean; jobCount: number }>('/api/digest/send', {
+      method: 'POST',
+    });
+  },
+
+  updateDigestConfig(patch: Partial<Pick<DigestStatus, 'enabled' | 'intervalDays' | 'minScore' | 'maxJobs'>>) {
+    return postJson<{ success: boolean }>('/api/digest/config', patch, 'PUT');
   },
 };

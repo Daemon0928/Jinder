@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import db from '../db/database';
+import { JOB_STATUSES } from '../lib/constants';
 
 const router = Router();
 
@@ -61,23 +62,45 @@ router.get('/', (req, res) => {
   }
 });
 
-// Update a job's status (e.g. mark as applied, bookmarked, rejected)
+// Update a job's pipeline status and/or free-text notes. Both fields are
+// optional so the board (status moves) and the details panel (notes) share
+// one endpoint; at least one must be present.
 router.patch('/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, notes } = req.body;
 
-    if (!['new', 'bookmarked', 'applied', 'rejected'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status value' });
+    if (status === undefined && notes === undefined) {
+      return res.status(400).json({ error: 'Provide status and/or notes to update' });
     }
 
-    const info = db.prepare('UPDATE jobs SET status = ? WHERE id = ?').run(status, id);
+    const sets: string[] = [];
+    const params: (string | number)[] = [];
+
+    if (status !== undefined) {
+      if (!JOB_STATUSES.includes(status)) {
+        return res.status(400).json({ error: 'Invalid status value' });
+      }
+      sets.push('status = ?');
+      params.push(status);
+    }
+    if (notes !== undefined) {
+      if (typeof notes !== 'string') {
+        return res.status(400).json({ error: 'Notes must be a string' });
+      }
+      sets.push('notes = ?');
+      params.push(notes);
+    }
+
+    const info = db
+      .prepare(`UPDATE jobs SET ${sets.join(', ')} WHERE id = ?`)
+      .run(...params, id);
 
     if (info.changes === 0) {
       return res.status(404).json({ error: 'Job not found' });
     }
 
-    res.json({ success: true, id, status });
+    res.json({ success: true, id, status, notes });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

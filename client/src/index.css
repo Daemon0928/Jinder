@@ -2026,3 +2026,208 @@ button.location-card {
 @media (max-width: 768px) {
   .analytics-grid { grid-template-columns: 1fr; }
 }
+
+/* --- Application Board (Kanban) --- */
+.board-scroll {
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.kanban-board {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  min-height: 60vh;
+}
+
+.kanban-column {
+  flex: 0 0 260px;
+  background-color: var(--bg-sidebar);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 220px);
+  transition: var(--transition-smooth);
+}
+
+.kanban-column.drag-over {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-glow);
+}
+
+.kanban-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.kanban-column-title {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.kanban-column-count {
+  background-color: var(--bg-card-hover);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.kanban-column-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.kanban-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  cursor: grab;
+  transition: var(--transition-smooth);
+}
+
+.kanban-card:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--border-focus);
+}
+
+.kanban-card.dragging {
+  opacity: 0.5;
+}
+
+.kanban-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.kanban-card-title {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.kanban-card-company {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.kanban-card-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px dashed var(--border-color);
+  padding-top: 6px;
+}
+
+.kanban-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 16px 0;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.score-badge.sm {
+  width: auto;
+  height: auto;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+/* --- Job notes + pipeline stage selector --- */
+.notes-textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.notes-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.details-footer {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pipeline-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.pipeline-stage-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stage-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* --- SMTP + digest settings --- */
+.smtp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+
+.smtp-grid .form-group {
+  margin-bottom: 16px;
+}
+
+.sub-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.smtp-secure-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.smtp-secure-row input {
+  width: auto;
+  margin: 0;
+}
+
+.digest-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.digest-fields .form-group {
+  margin-bottom: 0;
+  max-width: 120px;
+}
+
+@media (max-width: 768px) {
+  .smtp-grid { grid-template-columns: 1fr; }
+  .kanban-column { flex-basis: 80vw; }
+}

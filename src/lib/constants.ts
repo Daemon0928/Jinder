@@ -21,3 +21,20 @@ export const MAX_SEARCH_PAGES = 3;
 
 /** Discord embed sidebar color (blurple). */
 export const DISCORD_EMBED_COLOR = 3447003;
+
+/**
+ * Application-pipeline stages, in funnel order. A job starts at `new` and moves
+ * through the board as the user acts on it. This is the single source of truth
+ * for valid `status` values — the API validates against it and the board renders
+ * one column per entry.
+ */
+export const JOB_STATUSES = [
+  'new',
+  'interested',
+  'applied',
+  'interview',
+  'offer',
+  'rejected',
+] as const;
+
+export type JobStatus = (typeof JOB_STATUSES)[number];

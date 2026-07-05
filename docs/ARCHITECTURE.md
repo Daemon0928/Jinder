@@ -54,5 +54,5 @@ src/
 ## Testing strategy
 
 - **Unit** (vitest, `tests/unit/`): pure logic — SSRF matrix, location mapping invariants, retry semantics, and adversarial pipeline inputs (duplicate/out-of-range LLM indexes, fallback paths) with the Gemini module mocked.
-- **E2E** (`tests/e2e/`): a mock upstream server simulates both job portals, search engines, and captures webhooks; `MOCK_GEMINI=true` makes the matcher deterministic. The runner spawns the real server, drives it over HTTP, and asserts on responses, database state, and webhook payloads — 71 cases covering happy paths, malformed input, upstream failures, scheduler behavior, and endpoint hardening.
+- **E2E** (`tests/e2e/`): a mock upstream server simulates both job portals, search engines, and captures webhooks; `MOCK_GEMINI=true` makes the matcher deterministic. The runner spawns the real server, drives it over HTTP, and asserts on responses, database state, and webhook payloads — 77 cases covering happy paths, malformed input, upstream failures, scheduler behavior, application-pipeline updates, digest delivery, and endpoint hardening.
 - **CI** runs typecheck, type-aware lint, both builds, all tests, and a Docker image build.

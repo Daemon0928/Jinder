@@ -9,7 +9,26 @@ export interface ParsedJob {
   salary: string;
 }
 
-export type JobStatus = 'new' | 'bookmarked' | 'applied' | 'rejected';
+export type JobStatus = 'new' | 'interested' | 'applied' | 'interview' | 'offer' | 'rejected';
+
+/** Pipeline stages in funnel order — mirrors JOB_STATUSES on the backend. */
+export const JOB_STATUSES: JobStatus[] = [
+  'new',
+  'interested',
+  'applied',
+  'interview',
+  'offer',
+  'rejected',
+];
+
+export const STATUS_LABELS: Record<JobStatus, string> = {
+  new: 'New',
+  interested: 'Interested',
+  applied: 'Applied',
+  interview: 'Interview',
+  offer: 'Offer',
+  rejected: 'Rejected',
+};
 
 export interface Job {
   id: number;
@@ -27,6 +46,8 @@ export interface Job {
   match_justification: string;
   status: JobStatus;
   created_at: string;
+  /** Free-text notes attached on the application board. */
+  notes: string | null;
   /** Shared by listings of the same role scraped from different platforms. */
   dedupe_key: string | null;
 }
@@ -73,6 +94,46 @@ export interface AppConfig {
   locations: string[];
   companies: string[];
   batchSize: number;
+  email: EmailConfig;
+}
+
+export interface EmailConfig {
+  smtpHost: string;
+  smtpPort: string;
+  smtpSecure: boolean;
+  smtpUser: string;
+  /** Whether a password is stored (the secret itself is never returned). */
+  smtpPassSet: boolean;
+  from: string;
+  to: string;
+  /** Only sent on save when the user types a new password. */
+  smtpPass?: string;
+}
+
+export interface DigestJob {
+  title: string;
+  company: string;
+  location: string;
+  link: string;
+  score: number;
+  justification: string;
+}
+
+export interface DigestPreview {
+  jobs: DigestJob[];
+  periodDays: number;
+  generatedAt: string;
+}
+
+export interface DigestStatus {
+  enabled: boolean;
+  intervalDays: number;
+  minScore: number;
+  maxJobs: number;
+  channels: string[];
+  lastSentAt: string | null;
+  nextRunAt: string | null;
+  pendingCount: number;
 }
 
 export interface SchedulerSummary {

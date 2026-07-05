@@ -8,7 +8,7 @@
 
 ## Why
 
-Job boards make you search; Jinder makes the jobs come to you — pre-scored, translated to English, with an honest AI breakdown of *why you fit and where you fall short* for each posting.
+Job boards make you search; Jinder makes the jobs come to you — pre-scored, translated to English, with an honest AI breakdown of _why you fit and where you fall short_ for each posting.
 
 ## Key Features
 
@@ -16,13 +16,13 @@ Job boards make you search; Jinder makes the jobs come to you — pre-scored, tr
 - **CV-aware AI matching** — upload a PDF (or paste text); Gemini summarizes it, then batch-evaluates every new posting against it: match score, pros, cons, justification, tech stack, salary — with seniority gaps hard-capping the score.
 - **Cross-platform dedup** — the same vacancy found on multiple boards shares one AI evaluation (fewer Gemini calls) and is badged "also on …" in the UI.
 - **Analytics dashboard** — score distribution, per-platform quality, scrape-run history, and top companies.
-- **Discord alerts** — matches ≥ 80% trigger a webhook notification with the score and reasoning.
+- **Multi-channel notifications** — a pluggable channel interface delivers real-time Discord alerts for matches ≥ 80% and a periodic digest of your top new matches to Discord and/or email (SMTP).
 - **Background scheduler** — periodic scraping runs with live progress, run history, and CV re-evaluation after you update your profile.
-- **Application tracking** — bookmark, mark applied, or reject; filter by status, score, and free text.
+- **Application-tracking board** — a drag-and-drop kanban pipeline (`new → interested → applied → interview → offer/rejected`) with per-job notes; also filter the list by status, score, and free text.
 - **Self-hosted & private** — single container, SQLite storage, optional bearer-token auth. Your CV never leaves your machine except to the Gemini API.
 
-| Jobs list | Analytics |
-| --- | --- |
+| Jobs list                                    | Analytics                                    |
+| -------------------------------------------- | -------------------------------------------- |
 | ![Jobs list](docs/screenshots/jobs-list.png) | ![Analytics](docs/screenshots/analytics.png) |
 
 ## Quickstart (Docker)
@@ -59,16 +59,16 @@ Production build: `npm run build && npm start` — the Express server serves bot
 
 Copy `.env.example` to `.env`:
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `GEMINI_API_KEY` | for matching | Google Gemini API key. Without it the app runs but skips AI matching. |
-| `GEMINI_MODEL` | no | Model id (default `gemini-2.5-flash-lite`). |
-| `PORT` | no | Backend port (default `5000`). |
-| `AUTH_TOKEN` | no | When set, every `/api` request must send `Authorization: Bearer <token>`. |
-| `CORS_ORIGIN` | no | Allowed origin for cross-origin API calls (default Vite dev origin). |
-| `DB_FILE` | no | SQLite file path (default `./jobs.db`). |
+| Variable         | Required     | Description                                                               |
+| ---------------- | ------------ | ------------------------------------------------------------------------- |
+| `GEMINI_API_KEY` | for matching | Google Gemini API key. Without it the app runs but skips AI matching.     |
+| `GEMINI_MODEL`   | no           | Model id (default `gemini-2.5-flash-lite`).                               |
+| `PORT`           | no           | Backend port (default `5000`).                                            |
+| `AUTH_TOKEN`     | no           | When set, every `/api` request must send `Authorization: Bearer <token>`. |
+| `CORS_ORIGIN`    | no           | Allowed origin for cross-origin API calls (default Vite dev origin).      |
+| `DB_FILE`        | no           | SQLite file path (default `./jobs.db`).                                   |
 
-Everything else — keywords, locations, exclude keywords, target companies, Discord webhook, batch size, scheduler interval — is configured in the web UI and stored in SQLite.
+Everything else — keywords, locations, exclude keywords, target companies, Discord webhook, SMTP/email settings, digest schedule, batch size, scheduler interval — is configured in the web UI and stored in SQLite.
 
 ## Architecture
 
@@ -84,7 +84,7 @@ flowchart TD
         SM[Scraper manager]
         Pipe[Matching pipeline]
         GM[Gemini matcher]
-        Notify[Discord notifier]
+        Notify[Notification channels]
     end
 
     subgraph External
@@ -93,6 +93,7 @@ flowchart TD
         ATS[Career pages]
         Gem[Gemini API]
         Disc[Discord]
+        Email[Email/SMTP]
     end
 
     DB[(SQLite)]
@@ -101,7 +102,7 @@ flowchart TD
     API --> Sched --> SM
     SM --> Prof & NFJ & ATS
     SM --> Pipe --> GM <--> Gem
-    Pipe --> Notify --> Disc
+    Pipe --> Notify --> Disc & Email
     API & SM & Pipe <--> DB
 ```
 
@@ -110,8 +111,8 @@ A scrape run: search all sources in parallel (one shared Chromium instance) → 
 ## Testing
 
 ```bash
-npm test          # 36 unit tests (vitest): SSRF guard, matching pipeline, retry, locations
-npm run test:e2e  # 71 end-to-end cases against the real server with mocked portals + Gemini
+npm test          # 44 unit tests (vitest): SSRF guard, matching pipeline, retry, locations, digest rendering
+npm run test:e2e  # 77 end-to-end cases against the real server with mocked portals + Gemini
 npm run typecheck
 ```
 
@@ -131,18 +132,13 @@ The e2e suite boots a mock HTTP server that simulates Profession.hu, No Fluff Jo
 - Match quality is bounded by the LLM: scores are a triage signal, not a verdict.
 - Single-user by design (one CV, one config).
 
-## Roadmap
-
-- Application-tracking kanban (`new → interested → applied → interview → offer/rejected`) with per-job notes.
-- Weekly email digest of top new matches (generalizing the Discord notifier into a channel interface).
-
 ## Project Structure
 
 ```
 src/                 Express backend (routes/, scrapers/, matching/, matcher/, notify/, lib/, db/)
 client/src/          React frontend (api/, hooks/, components/, context/)
 tests/unit/          Vitest unit tests
-tests/e2e/           Mocked end-to-end suite (mock server + runner + 71 cases)
+tests/e2e/           Mocked end-to-end suite (mock server + runner + 77 cases)
 scripts/seed-demo.ts Demo data seeder
 docs/                Architecture notes, screenshots, devlog
 ```
