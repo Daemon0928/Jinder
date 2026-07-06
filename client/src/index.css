@@ -1,37 +1,43 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-
 :root {
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-title: 'Outfit', sans-serif;
-
-  /* Sleek Dark Mode Palette */
-  --bg-main: #090a0f;
-  --bg-sidebar: #0f111a;
-  --bg-card: #151824;
-  --bg-card-hover: #1e2235;
-  --border-color: #24293f;
-  --border-focus: #4f46e5;
+  /* Color Palette - Deep Space Glass */
+  --bg-main: #0A0A0F;
+  --bg-sidebar: rgba(15, 17, 26, 0.4);
+  --bg-card: rgba(20, 20, 25, 0.6);
+  --bg-card-hover: rgba(30, 30, 40, 0.8);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-focus: #9D4EDD;
   
   --text-primary: #f3f4f6;
   --text-secondary: #9ca3af;
   --text-muted: #6b7280;
 
   /* Theme Accents */
-  --color-primary: #6366f1;
-  --color-primary-glow: rgba(99, 102, 241, 0.15);
-  --color-success: #10b981;
-  --color-success-glow: rgba(16, 185, 129, 0.1);
-  --color-warning: #f59e0b;
-  --color-warning-glow: rgba(245, 158, 11, 0.1);
-  --color-danger: #ef4444;
-  --color-danger-glow: rgba(239, 68, 68, 0.1);
-  --color-info: #06b6d4;
+  --color-primary: #9D4EDD;
+  --color-primary-glow: rgba(157, 78, 221, 0.4);
+  --color-success: #10B981;
+  --color-success-glow: rgba(16, 185, 129, 0.4);
+  --color-warning: #F59E0B;
+  --color-warning-glow: rgba(245, 158, 11, 0.2);
+  --color-danger: #EF4444;
+  --color-danger-glow: rgba(239, 68, 68, 0.2);
+  --color-info: #0ea5e9;
 
-  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-title: 'Outfit', sans-serif;
+
+  /* Effects */
+  --glass-blur: blur(12px);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 20px var(--color-primary-glow);
+  
+  /* Animations */
+  --transition-smooth: all 0.2s ease-in-out;
+  --transition-spring: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
-  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
 }
 
 * {
@@ -42,6 +48,8 @@
 
 body {
   background-color: var(--bg-main);
+  background-image: radial-gradient(circle at 15% 50%, rgba(157, 78, 221, 0.04), transparent 25%),
+                    radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.04), transparent 25%);
   color: var(--text-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -65,6 +73,8 @@ button, input, textarea, select {
 .sidebar {
   width: 280px;
   background-color: var(--bg-sidebar);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -73,6 +83,7 @@ button, input, textarea, select {
   position: sticky;
   top: 0;
   height: 100vh;
+  z-index: 10;
 }
 
 .logo-container {
@@ -83,7 +94,7 @@ button, input, textarea, select {
 }
 
 .logo-icon {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-info));
+  background: linear-gradient(135deg, var(--color-primary), #6366f1);
   width: 38px;
   height: 38px;
   border-radius: 10px;
@@ -98,9 +109,9 @@ button, input, textarea, select {
 
 .logo-text {
   font-family: var(--font-title);
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 800;
-  background: linear-gradient(to right, #ffffff, #a5b4fc);
+  background: linear-gradient(to right, #ffffff, var(--color-primary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -0.5px;
@@ -127,17 +138,20 @@ button, input, textarea, select {
   cursor: pointer;
   text-align: left;
   transition: var(--transition-smooth);
+  border-left: 3px solid transparent;
 }
 
 .nav-item:hover {
   color: var(--text-primary);
   background-color: rgba(255, 255, 255, 0.03);
+  transform: translateX(4px);
 }
 
 .nav-item.active {
   color: white;
-  background-color: var(--color-primary);
-  box-shadow: 0 4px 12px var(--color-primary-glow);
+  background-color: var(--color-primary-glow);
+  border-left: 3px solid var(--color-primary);
+  box-shadow: inset 40px 0 40px -40px rgba(157, 78, 221, 0.5);
 }
 
 .sidebar-footer {
@@ -233,19 +247,23 @@ button, input, textarea, select {
 }
 
 .btn-primary {
-  background-color: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary), #6366f1, var(--color-primary));
+  background-size: 200% auto;
   color: white;
   box-shadow: 0 4px 12px var(--color-primary-glow);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background-color: #5558e6;
-  transform: translateY(-1px);
+  background-position: right center;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px var(--color-primary-glow);
 }
 
 .btn-primary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  transform: none;
+  background-position: left center;
 }
 
 .btn-secondary {
@@ -259,9 +277,10 @@ button, input, textarea, select {
   border-color: var(--text-muted);
 }
 
-/* Filters Panel */
 .filters-panel {
   background-color: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 24px;
@@ -354,6 +373,8 @@ button, input, textarea, select {
 .job-details-container {
   width: 550px;
   background-color: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   display: flex;
@@ -361,16 +382,19 @@ button, input, textarea, select {
   overflow: hidden;
   box-shadow: var(--shadow-lg);
   flex-shrink: 0;
+  transition: var(--transition-spring);
 }
 
 /* Job Card */
 .job-card {
   background-color: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 18px 20px;
   cursor: pointer;
-  transition: var(--transition-smooth);
+  transition: var(--transition-spring);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -379,14 +403,15 @@ button, input, textarea, select {
 
 .job-card:hover {
   background-color: var(--bg-card-hover);
-  border-color: var(--text-muted);
-  transform: translateX(2px);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: var(--shadow-lg);
 }
 
 .job-card.selected {
   border-color: var(--color-primary);
-  background-color: rgba(99, 102, 241, 0.05);
-  box-shadow: 0 0 15px rgba(99, 102, 241, 0.1);
+  background-color: rgba(157, 78, 221, 0.1);
+  box-shadow: 0 0 20px var(--color-primary-glow);
 }
 
 .job-card-info {
@@ -454,9 +479,9 @@ button, input, textarea, select {
 
 /* Match Score Badge */
 .score-badge {
-  width: 50px;
-  height: 50px;
-  border-radius: 12px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -464,28 +489,31 @@ button, input, textarea, select {
   font-weight: 800;
   font-size: 16px;
   flex-shrink: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: var(--glass-blur);
 }
 
 .score-badge.high {
-  background-color: var(--color-success-glow);
   color: var(--color-success);
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  border: 3px solid var(--color-success);
+  box-shadow: 0 0 15px var(--color-success-glow), inset 0 0 10px var(--color-success-glow);
 }
 
 .score-badge.medium {
-  background-color: var(--color-warning-glow);
   color: var(--color-warning);
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  border: 3px solid var(--color-warning);
+  box-shadow: 0 0 15px var(--color-warning-glow), inset 0 0 10px var(--color-warning-glow);
 }
 
 .score-badge.low {
-  background-color: var(--color-danger-glow);
   color: var(--color-danger);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  border: 3px solid var(--color-danger);
+  box-shadow: 0 0 15px var(--color-danger-glow), inset 0 0 10px var(--color-danger-glow);
 }
 
 .score-badge.none {
-  background-color: var(--border-color);
+  background-color: var(--bg-card);
+  border: 2px dashed var(--border-color);
   color: var(--text-secondary);
 }
 
@@ -679,10 +707,12 @@ button, input, textarea, select {
 
 .form-group input[type="text"],
 .form-group input[type="number"],
-.form-group input[type="url"] {
+.form-group input[type="url"],
+.form-group select,
+.form-group textarea {
   width: 100%;
-  padding: 10px 14px;
-  background-color: var(--bg-main);
+  padding: 12px 16px;
+  background-color: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -690,29 +720,20 @@ button, input, textarea, select {
   transition: var(--transition-smooth);
 }
 
+.form-group textarea {
+  min-height: 350px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
 .form-group input[type="text"]:focus,
 .form-group input[type="number"]:focus,
-.form-group input[type="url"]:focus {
-  border-color: var(--border-focus);
-}
-
-.form-group textarea {
-  width: 100%;
-  min-height: 350px;
-  background-color: var(--bg-main);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 16px;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text-primary);
-  outline: none;
-  resize: vertical;
-  transition: var(--transition-smooth);
-}
-
+.form-group input[type="url"]:focus,
+.form-group select:focus,
 .form-group textarea:focus {
-  border-color: var(--border-focus);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(157, 78, 221, 0.2);
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
 /* Keyword Tag management */
@@ -2042,7 +2063,9 @@ button.location-card {
 
 .kanban-column {
   flex: 0 0 260px;
-  background-color: var(--bg-sidebar);
+  background-color: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   display: flex;
@@ -2053,7 +2076,7 @@ button.location-card {
 
 .kanban-column.drag-over {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-glow);
+  box-shadow: 0 0 0 2px var(--color-primary-glow), inset 0 0 20px rgba(157, 78, 221, 0.1);
 }
 
 .kanban-column-header {
@@ -2089,20 +2112,27 @@ button.location-card {
 
 .kanban-card {
   background-color: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 12px;
   cursor: grab;
-  transition: var(--transition-smooth);
+  transition: var(--transition-spring);
 }
 
 .kanban-card:hover {
   background-color: var(--bg-card-hover);
-  border-color: var(--border-focus);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
 }
 
 .kanban-card.dragging {
-  opacity: 0.5;
+  opacity: 0.9;
+  transform: rotate(3deg) scale(1.05);
+  box-shadow: 0 16px 32px rgba(0,0,0,0.6);
+  z-index: 100;
 }
 
 .kanban-card-top {
@@ -2230,4 +2260,48 @@ button.location-card {
 @media (max-width: 768px) {
   .smtp-grid { grid-template-columns: 1fr; }
   .kanban-column { flex-basis: 80vw; }
+}
+
+/* Skeleton Loading Cards */
+.skeleton-card {
+  background-color: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  background-image: linear-gradient(90deg, rgba(255,255,255,0) 0, rgba(255,255,255,0.03) 20%, rgba(255,255,255,0) 40%, rgba(255,255,255,0));
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-line {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  height: 14px;
+}
+
+.skeleton-line.title {
+  width: 180px;
+  height: 18px;
+}
+
+.skeleton-line.subtitle {
+  width: 120px;
+}
+
+.skeleton-score {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.05);
 }

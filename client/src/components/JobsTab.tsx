@@ -1,7 +1,7 @@
 import type { Job } from '../api/types';
 import { JOB_STATUSES, STATUS_LABELS } from '../api/types';
 import JobDetails from './JobDetails';
-import Spinner from './ui/Spinner';
+import SkeletonCard from './ui/SkeletonCard';
 
 interface FiltersState {
   searchQuery: string;
@@ -116,9 +116,12 @@ export default function JobsTab({
         {/* Left Column: Jobs List */}
         <div className="jobs-list-container">
           {loading ? (
-            <div className="details-empty">
-              <Spinner />
-              <p>Loading your job matches...</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
             </div>
           ) : error ? (
             <div className="details-empty">

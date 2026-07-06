@@ -25,8 +25,11 @@ services:
       start_period: 20s
       retries: 3
 
-  # E2E Test Runner Service (uses the build stage — needs dev deps and tests/)
+  # E2E Test Runner Service (uses the build stage — needs dev deps and tests/).
+  # Behind the "test" profile so deployment (`docker compose up`) never starts it;
+  # run explicitly with `docker compose --profile test up tests`.
   tests:
+    profiles: ["test"]
     build:
       context: .
       dockerfile: Dockerfile
