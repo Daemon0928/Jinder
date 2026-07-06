@@ -76,7 +76,7 @@ export const api = {
   },
 
   batchDeleteJobs(filters: { status?: string; minScore?: number; q?: string }) {
-    const payload: any = {};
+    const payload: { status?: string; minScore?: number; q?: string } = {};
     if (filters.status && filters.status !== 'all') payload.status = filters.status;
     if (filters.minScore && filters.minScore > 0) payload.minScore = filters.minScore;
     if (filters.q) payload.q = filters.q;
