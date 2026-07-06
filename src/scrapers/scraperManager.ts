@@ -166,6 +166,7 @@ export async function runScraper(
         // Check if job already exists in DB
         const exists = checkStmt.get(job.job_id);
         if (exists) {
+          db.prepare("UPDATE jobs SET is_obsolete = 0 WHERE job_id = ?").run(job.job_id);
           skipped++;
           onProgress?.({
             currentJobIndex: i + 1,
@@ -378,6 +379,24 @@ export async function runScraper(
         },
       },
     );
+
+    // 4. Mark old jobs not seen in this run as obsolete
+    const scrapedJobIds = jobs.map((j) => j.job_id);
+    if (scrapedJobIds.length > 0) {
+      const chunkSize = 900;
+      for (let i = 0; i < scrapedJobIds.length; i += chunkSize) {
+        const chunk = scrapedJobIds.slice(i, i + chunkSize);
+        const placeholders = chunk.map(() => '?').join(',');
+        db.prepare(`
+          UPDATE jobs 
+          SET is_obsolete = 1 
+          WHERE created_at < datetime('now', '-30 days', 'localtime') 
+            AND is_obsolete = 0 
+            AND job_id NOT IN (${placeholders})
+        `).run(...chunk);
+      }
+      console.log("Marked non-matching listings older than 1 month as obsolete.");
+    }
   } catch (error: any) {
     console.error("Scraper manager run failed:", error.message);
     report.errors.push(`Global scraper error: ${error.message}`);

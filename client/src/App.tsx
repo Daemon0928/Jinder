@@ -11,6 +11,7 @@ import { useToast } from './context/toast';
 import { Sidebar, MobileBottomNav } from './components/Nav';
 import type { Tab } from './components/Nav';
 import ScrapeProgressPanel from './components/ScrapeProgressPanel';
+import FiltersPanel from './components/FiltersPanel';
 import JobsTab from './components/JobsTab';
 import BoardTab from './components/BoardTab';
 import AnalyticsTab from './components/AnalyticsTab';
@@ -122,6 +123,41 @@ function AppShell() {
     }
   }, [pendingDeleteId, refreshJobs, showToast]);
 
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
+  const [boardRefreshKey, setBoardRefreshKey] = useState(0);
+  const [boardFilteredCount, setBoardFilteredCount] = useState(0);
+
+  const query = filters.searchQuery.toLowerCase();
+  const filteredJobs = jobs.filter(
+    (job) =>
+      job.title.toLowerCase().includes(query) ||
+      job.company.toLowerCase().includes(query) ||
+      (job.location && job.location.toLowerCase().includes(query)) ||
+      (job.parsed_json?.techStack &&
+        job.parsed_json.techStack.some((t) => t.toLowerCase().includes(query))),
+  );
+
+  const handleBatchDeleteClick = useCallback(() => {
+    setShowBatchDeleteConfirm(true);
+  }, []);
+
+  const confirmBatchDelete = useCallback(async () => {
+    try {
+      const activeFilters = {
+        status: activeTab === 'jobs' ? filters.statusFilter : 'all',
+        minScore: filters.minScore,
+        q: filters.searchQuery,
+      };
+      const res = await api.batchDeleteJobs(activeFilters);
+      showToast(`Successfully deleted ${res.count} jobs.`, 'success');
+      setShowBatchDeleteConfirm(false);
+      void refreshJobs();
+      setBoardRefreshKey((prev) => prev + 1);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Failed to batch delete jobs', 'error');
+    }
+  }, [activeTab, filters, refreshJobs, showToast]);
+
   const handleSaveConfig = useCallback(async () => {
     await saveConfig(config);
   }, [saveConfig, config]);
@@ -169,13 +205,22 @@ function AppShell() {
 
         {isScraping && <ScrapeProgressPanel progress={progress} />}
 
+        {(activeTab === 'jobs' || activeTab === 'board') && (
+          <FiltersPanel
+            filters={filters}
+            onFiltersChange={(partial) => setFilters((prev) => ({ ...prev, ...partial }))}
+            showStatusFilter={activeTab === 'jobs'}
+            onBatchDelete={handleBatchDeleteClick}
+            filteredCount={activeTab === 'jobs' ? filteredJobs.length : boardFilteredCount}
+          />
+        )}
+
         {activeTab === 'jobs' && (
           <JobsTab
             jobs={jobs}
+            filteredJobs={filteredJobs}
             loading={loading}
             error={error}
-            filters={filters}
-            onFiltersChange={(partial) => setFilters((prev) => ({ ...prev, ...partial }))}
             selectedJob={displayedJob}
             onSelectJob={setSelectedJob}
             onRetry={refreshJobs}
@@ -185,7 +230,15 @@ function AppShell() {
           />
         )}
 
-        {activeTab === 'board' && <BoardTab onOpenJob={handleOpenJobFromBoard} />}
+        {activeTab === 'board' && (
+          <BoardTab
+            key={boardRefreshKey}
+            onOpenJob={handleOpenJobFromBoard}
+            searchQuery={filters.searchQuery}
+            minScore={filters.minScore}
+            onFilteredCountChange={setBoardFilteredCount}
+          />
+        )}
 
         {activeTab === 'analytics' && <AnalyticsTab />}
 
@@ -227,6 +280,15 @@ function AppShell() {
         confirmLabel="Delete"
         onConfirm={confirmDeleteJob}
         onCancel={() => setPendingDeleteId(null)}
+      />
+
+      <ConfirmDialog
+        open={showBatchDeleteConfirm}
+        title="Batch delete job listings"
+        message={`Are you sure you want to delete all ${activeTab === 'jobs' ? filteredJobs.length : boardFilteredCount} jobs matching your active filters?`}
+        confirmLabel="Delete All"
+        onConfirm={confirmBatchDelete}
+        onCancel={() => setShowBatchDeleteConfirm(false)}
       />
     </div>
   );

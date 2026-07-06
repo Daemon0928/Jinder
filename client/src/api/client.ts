@@ -75,6 +75,14 @@ export const api = {
     return request<{ success: boolean }>(`/api/jobs/${id}`, { method: 'DELETE' });
   },
 
+  batchDeleteJobs(filters: { status?: string; minScore?: number; q?: string }) {
+    const payload: any = {};
+    if (filters.status && filters.status !== 'all') payload.status = filters.status;
+    if (filters.minScore && filters.minScore > 0) payload.minScore = filters.minScore;
+    if (filters.q) payload.q = filters.q;
+    return postJson<{ success: boolean; count: number }>('/api/jobs/batch-delete', payload);
+  },
+
   getConfig(): Promise<AppConfig> {
     return request<AppConfig>('/api/config');
   },

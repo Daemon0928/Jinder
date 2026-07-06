@@ -206,7 +206,7 @@ export default function SettingsTab({
       </div>
 
       <div className="form-group scheduler-section">
-        <label>🕒 Scheduled Scraping Service</label>
+        <label>Scheduled Scraping Service</label>
         <p className="card-description" style={{ marginBottom: '16px' }}>
           Configure automatic background job scanning at regular intervals.
         </p>
@@ -254,13 +254,13 @@ export default function SettingsTab({
           <div className="scheduler-info">
             {schedulerEnabled && schedulerStatus?.nextRunAt && (
               <div>
-                📅 <strong>Next Scan:</strong>{' '}
+                <strong>Next Scan:</strong>{' '}
                 {new Date(schedulerStatus.nextRunAt).toLocaleString()}
               </div>
             )}
             {schedulerStatus?.lastRunAt && (
               <div>
-                🔄 <strong>Last Scan:</strong>{' '}
+                <strong>Last Scan:</strong>{' '}
                 {new Date(schedulerStatus.lastRunAt).toLocaleString()}
               </div>
             )}
@@ -269,16 +269,16 @@ export default function SettingsTab({
                 <div className="scheduler-summary-title">Last Scan Summary:</div>
                 <div className="scheduler-summary-grid">
                   <div>
-                    📋 Scraped: <strong>{lastSummary.totalScraped}</strong>
+                    Scraped: <strong>{lastSummary.totalScraped}</strong>
                   </div>
                   <div>
-                    ✨ New: <strong>{lastSummary.newJobs}</strong>
+                    New: <strong>{lastSummary.newJobs}</strong>
                   </div>
                   <div>
-                    🤝 Matched: <strong>{lastSummary.matched}</strong>
+                    Matched: <strong>{lastSummary.matched}</strong>
                   </div>
                   <div>
-                    ⚠️ Errors: <strong>{lastSummary.errors?.length || 0}</strong>
+                    Errors: <strong>{lastSummary.errors?.length || 0}</strong>
                   </div>
                 </div>
               </div>
@@ -288,7 +288,7 @@ export default function SettingsTab({
       </div>
 
       <div className="form-group" style={{ marginBottom: '32px' }}>
-        <label>📧 Email (SMTP) for Digests</label>
+        <label>Email (SMTP) for Digests</label>
         <p className="card-description" style={{ marginBottom: '12px' }}>
           Configure an SMTP server to receive the weekly digest by email. Saved with the button
           below.
@@ -368,7 +368,7 @@ export default function SettingsTab({
       </div>
 
       <div className="form-group scheduler-section">
-        <label>📬 Weekly Match Digest</label>
+        <label>Weekly Match Digest</label>
         <p className="card-description" style={{ marginBottom: '16px' }}>
           Periodically send a roundup of your top new matches to every configured channel
           (Discord and/or Email).
@@ -431,23 +431,23 @@ export default function SettingsTab({
 
           <div className="scheduler-info">
             <div>
-              📡 <strong>Channels:</strong>{' '}
+              <strong>Channels:</strong>{' '}
               {digestStatus && digestStatus.channels.length > 0
                 ? digestStatus.channels.join(', ')
                 : 'none configured'}
             </div>
             <div>
-              📥 <strong>Pending matches:</strong> {digestStatus?.pendingCount ?? 0}
+              <strong>Pending matches:</strong> {digestStatus?.pendingCount ?? 0}
             </div>
             {digestEnabled && digestStatus?.nextRunAt && (
               <div>
-                📅 <strong>Next digest:</strong>{' '}
+                <strong>Next digest:</strong>{' '}
                 {new Date(digestStatus.nextRunAt).toLocaleString()}
               </div>
             )}
             {digestStatus?.lastSentAt && (
               <div>
-                ✅ <strong>Last sent:</strong> {new Date(digestStatus.lastSentAt).toLocaleString()}
+                <strong>Last sent:</strong> {new Date(digestStatus.lastSentAt).toLocaleString()}
               </div>
             )}
           </div>

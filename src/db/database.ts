@@ -102,6 +102,14 @@ const migrations: Array<{ version: number; name: string; up: (d: Database.Databa
       d.prepare("UPDATE jobs SET status = 'interested' WHERE status = 'bookmarked'").run();
     },
   },
+  {
+    version: 4,
+    name: 'obsolete listings support',
+    up: (d) => {
+      d.prepare('ALTER TABLE jobs ADD COLUMN is_obsolete INTEGER DEFAULT 0').run();
+      d.prepare('CREATE INDEX IF NOT EXISTS idx_jobs_is_obsolete ON jobs(is_obsolete)').run();
+    },
+  },
 ];
 
 export function initDatabase() {

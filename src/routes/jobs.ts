@@ -20,7 +20,7 @@ function parseJobRow(job: any) {
 router.get('/', (req, res) => {
   try {
     const { status, minScore, platform, q } = req.query;
-    let where = ' FROM jobs WHERE 1=1';
+    let where = ' FROM jobs WHERE is_obsolete = 0';
     const params: (string | number)[] = [];
 
     if (status) {
@@ -117,6 +117,38 @@ router.delete('/:id', (req, res) => {
     }
 
     res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Batch delete jobs matching filters
+router.post('/batch-delete', (req, res) => {
+  try {
+    const { status, minScore, platform, q } = req.body;
+    let query = 'DELETE FROM jobs WHERE is_obsolete = 0';
+    const params: (string | number)[] = [];
+
+    if (status && status !== 'all') {
+      query += ' AND status = ?';
+      params.push(String(status));
+    }
+    if (minScore) {
+      query += ' AND match_score >= ?';
+      params.push(Number(minScore));
+    }
+    if (platform) {
+      query += ' AND platform = ?';
+      params.push(String(platform));
+    }
+    if (q) {
+      query += ' AND (title LIKE ? OR company LIKE ?)';
+      const like = `%${String(q)}%`;
+      params.push(like, like);
+    }
+
+    const info = db.prepare(query).run(...params);
+    res.json({ success: true, count: info.changes });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

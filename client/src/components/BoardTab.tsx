@@ -8,6 +8,9 @@ import Spinner from './ui/Spinner';
 interface BoardTabProps {
   /** Open a card in the Jobs tab for full details / notes. */
   onOpenJob: (job: Job) => void;
+  searchQuery: string;
+  minScore: number;
+  onFilteredCountChange: (count: number) => void;
 }
 
 function scoreClass(score: number): string {
@@ -17,12 +20,12 @@ function scoreClass(score: number): string {
   return 'none';
 }
 
-/**
- * Application-tracking kanban. One column per pipeline stage; cards are dragged
- * between columns to move a job's status. Updates are optimistic and persisted
- * via PATCH /api/jobs/:id, rolling back on failure.
- */
-export default function BoardTab({ onOpenJob }: BoardTabProps) {
+export default function BoardTab({
+  onOpenJob,
+  searchQuery,
+  minScore,
+  onFilteredCountChange,
+}: BoardTabProps) {
   const { showToast } = useToast();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +33,24 @@ export default function BoardTab({ onOpenJob }: BoardTabProps) {
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<JobStatus | null>(null);
   const loadedOnce = useRef(false);
+
+  // Client-side text filter and score filter on the board
+  const query = searchQuery.toLowerCase();
+  const filteredJobs = jobs.filter((job) => {
+    const matchesQuery =
+      !query ||
+      job.title.toLowerCase().includes(query) ||
+      job.company.toLowerCase().includes(query) ||
+      (job.location && job.location.toLowerCase().includes(query)) ||
+      (job.parsed_json?.techStack &&
+        job.parsed_json.techStack.some((t) => t.toLowerCase().includes(query)));
+    const matchesScore = job.match_score >= minScore;
+    return matchesQuery && matchesScore;
+  });
+
+  useEffect(() => {
+    onFilteredCountChange(filteredJobs.length);
+  }, [filteredJobs.length, onFilteredCountChange]);
 
   const refresh = useCallback(async () => {
     try {
@@ -78,7 +99,7 @@ export default function BoardTab({ onOpenJob }: BoardTabProps) {
   if (error) {
     return (
       <div className="details-empty">
-        <span className="details-empty-icon" aria-hidden="true">⚠️</span>
+        <span className="details-empty-icon" aria-hidden="true">Error</span>
         <p>{error}</p>
         <button type="button" className="btn btn-secondary" onClick={() => void refresh()}>
           Retry
@@ -91,7 +112,7 @@ export default function BoardTab({ onOpenJob }: BoardTabProps) {
     <div className="board-scroll">
       <div className="kanban-board">
         {JOB_STATUSES.map((status) => {
-          const columnJobs = jobs.filter((j) => j.status === status);
+          const columnJobs = filteredJobs.filter((j) => j.status === status);
           return (
             <div
               key={status}
@@ -147,7 +168,7 @@ export default function BoardTab({ onOpenJob }: BoardTabProps) {
                     <div className="kanban-card-company">{job.company}</div>
                     {job.notes && job.notes.trim() !== '' && (
                       <div className="kanban-card-note" title={job.notes}>
-                        🗒️ {job.notes.trim().slice(0, 60)}
+                        Note: {job.notes.trim().slice(0, 60)}
                         {job.notes.trim().length > 60 ? '…' : ''}
                       </div>
                     )}
